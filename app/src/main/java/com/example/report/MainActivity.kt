@@ -1,5 +1,7 @@
 package com.example.report
 
+import com.example.report.core.ReportBuilder
+
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -134,7 +136,7 @@ fun App(vm: ReportViewModel) {
     // Direct send to WhatsApp (optionally to a phone via wa.me) and/or Signal.
     LaunchedEffect(vm.directTrigger) {
         if (vm.directTrigger <= 0) return@LaunchedEffect
-        val text = if (vm.previewVisible) vm.previewText else vm.buildReport()
+        val text = reportText(vm)
         if (vm.autoWhatsApp) {
             val phone = vm.waPhone.filter { it.isDigit() }
             if (openInApp(context, "com.whatsapp", text, phone) || openInApp(context, "com.whatsapp.w4b", text, phone)) {
@@ -239,7 +241,8 @@ fun App(vm: ReportViewModel) {
     }
 }
 
-private fun reportText(vm: ReportViewModel): String = if (vm.previewVisible) vm.previewText else vm.buildReport()
+private fun reportText(vm: ReportViewModel): String =
+    ReportBuilder.finalize(vm.mode, if (vm.previewVisible) vm.previewText else vm.buildReport())
 
 private fun doCopy(context: Context, vm: ReportViewModel) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

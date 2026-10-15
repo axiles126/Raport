@@ -171,7 +171,7 @@ class ReportAlarmReceiver : BroadcastReceiver() {
             val templates = store.load<List<String>>("kap_templates", emptyList())
             val fields = store.load<List<Field>>("kap_fields", emptyList())
             val dayCfg = store.load<DayCfg>("kap_daycfg", DayCfg())
-            return ReportBuilder.build(
+            return ReportBuilder.finalize(mode, ReportBuilder.build(
                 ReportInput(
                     mode = mode.ifBlank { "current" },
                     name = sp.getString("kap_name", "") ?: "",
@@ -196,7 +196,7 @@ class ReportAlarmReceiver : BroadcastReceiver() {
                     dayEnd = sp.getString("kap_dayend", "") ?: "",
                     shiftDetailed = sp.getBoolean("kap_shiftdetail", true),
                 ),
-            )
+            ))
         }
     }
 }

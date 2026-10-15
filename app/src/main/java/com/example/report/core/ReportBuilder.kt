@@ -20,6 +20,24 @@ object ReportBuilder {
     /** Report line / event with optional end time [t2]. */
     private data class Ev(val t: Long, val t2: Long?, val text: String, val mgrs: String)
 
+    const val POS_BG = "Позиція БГ"
+    private val TIME_RANGE = Regex("^\\s*\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2}")
+    private val NUM_PREFIX = Regex("^\\s*\\d+\\s*[.)]\\s*")
+
+    /**
+     * Final text right before sending/copying. Day/Night: every line after the "HH:MM-HH:MM date"
+     * header is (re)numbered 1..N — lines typed by hand get numbers too — and "Позиція БГ" stays last.
+     */
+    fun finalize(mode: String, text: String): String {
+        if (mode != "day" && mode != "night") return text
+        val lines = text.split("\n")
+        val h = lines.indexOfFirst { TIME_RANGE.containsMatchIn(it) }
+        if (h < 0) return text
+        val items = lines.drop(h + 1).map { it.replace(NUM_PREFIX, "").trim() }.filter { it.isNotBlank() }
+        val body = items.filterNot { it.trim().equals(POS_BG, ignoreCase = true) } + POS_BG
+        return (lines.take(h + 1) + body.mapIndexed { n, s -> "${n + 1}. $s" }).joinToString("\n")
+    }
+
     fun build(input: ReportInput): String = when (input.mode) {
         "day", "night" -> buildDayNight(input)
         "week" -> buildWeek(input)
@@ -353,6 +371,7 @@ object ReportBuilder {
         val drones = cfg.drones.filter { it.name.isNotEmpty() }
         out += "${i + 3}. Дронів на позиції " +
             if (drones.isNotEmpty()) drones.joinToString(", ") { "\"${it.name}\" ${it.qty} шт" } else "- 0 шт"
+        out += "${i + 4}. $POS_BG"
 
         return out.joinToString("\n")
     }
