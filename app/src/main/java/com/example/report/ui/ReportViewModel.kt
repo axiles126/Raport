@@ -18,6 +18,7 @@ import com.example.report.core.TimeFmt
 import com.example.report.data.DailyAlarm
 import com.example.report.data.DayCfg
 import com.example.report.data.DroneIn
+import com.example.report.data.Route
 import com.example.report.data.StrikeDraft
 import com.example.report.data.Event
 import com.example.report.data.Field
@@ -99,8 +100,13 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     var strike by mutableStateOf(StrikeDraft())
     var strikeCoordTarget by mutableStateOf(false)
 
-    /** Route drawn on the map (lat, lng), kept while the app runs. */
+    /** Route being drawn on the map (lat, lng); [routeStrokes] = start index of each tap/stroke (for undo). */
     val route = mutableStateListOf<Pair<Double, Double>>()
+    val routeStrokes = mutableStateListOf<Int>()
+    /** Id of the saved route loaded for editing (null = new). */
+    var routeEditId by mutableStateOf<String?>(null)
+    /** Saved routes, persisted. */
+    val routes = mutableStateListOf<Route>()
     val fields = mutableStateListOf<Field>()
     val points = mutableStateListOf<Point>()
     var dayCfg by mutableStateOf(DayCfg())
@@ -217,6 +223,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         droneIns.addAll(store.load<List<DroneIn>>("kap_dronein", emptyList()))
         droneModel = sp.getString("kap_drone_model", "Matrice 4T") ?: "Matrice 4T"
         strike = store.load<StrikeDraft>("kap_strike", StrikeDraft())
+        routes.addAll(store.load<List<Route>>("kap_routes", emptyList()))
 
         val savedSchedules = store.load<List<ScheduledSend>>("kap_schedules", emptyList())
         schedules.clear()
@@ -791,6 +798,58 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         saveEvents()
         afterData()
         emit(Op.AddEvent(picked))
+    }
+
+    // ==== map routes ========================================================================
+
+    fun routeAdd(pts: List<Pair<Double, Double>>) {
+        if (pts.isEmpty()) return
+        routeStrokes.add(route.size); route.addAll(pts)
+    }
+
+    fun routeUndo() {
+        val from = routeStrokes.removeLastOrNull() ?: return
+        while (route.size > from) route.removeAt(route.lastIndex)
+    }
+
+    fun routeClear() { route.clear(); routeStrokes.clear(); routeEditId = null }
+
+    private fun saveRoutes() =
+        store.putStringNow("kap_routes", store.json.encodeToString(ListSerializer(Route.serializer()), routes.toList()))
+
+    /** Saves the route being drawn (new or the one loaded for editing) and clears the drawing. */
+    fun saveRoute(name: String, color: String) {
+        if (route.size < 2) return
+        val nm = name.trim().ifEmpty { "Маршрут " + (routes.size + 1) }
+        val i = routes.indexOfFirst { it.id == routeEditId }
+        val r = Route(routeEditId ?: ("r" + System.currentTimeMillis().toString(36)), nm, color, route.toList(), true)
+        if (i >= 0) routes[i] = r else routes.add(r)
+        saveRoutes(); routeClear()
+        setStatus("✓ Маршрут «$nm» збережено", "ok")
+    }
+
+    fun updateRoute(id: String, name: String? = null, color: String? = null) {
+        val i = routes.indexOfFirst { it.id == id }; if (i < 0) return
+        routes[i] = routes[i].copy(name = name?.trim()?.ifEmpty { null } ?: routes[i].name, color = color ?: routes[i].color)
+        saveRoutes()
+    }
+
+    fun setRouteVisible(id: String, on: Boolean) {
+        val i = routes.indexOfFirst { it.id == id }; if (i < 0) return
+        routes[i] = routes[i].copy(visible = on); saveRoutes()
+    }
+
+    fun setAllRoutesVisible(on: Boolean) {
+        for (i in routes.indices) routes[i] = routes[i].copy(visible = on)
+        saveRoutes()
+    }
+
+    fun deleteRoute(id: String) { routes.removeAll { it.id == id }; saveRoutes() }
+
+    /** Loads a saved route into the drawing for editing (save overwrites it). */
+    fun editRoute(id: String) {
+        val r = routes.firstOrNull { it.id == id } ?: return
+        routeClear(); routeAdd(r.pts); routeEditId = id
     }
 
     // ==== «Ураження»: separate report ======================================================

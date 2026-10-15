@@ -80,6 +80,10 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Polyline
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Gesture
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Map
+import com.example.report.data.Route
 import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.automirrored.filled.Undo
 import org.osmdroid.views.overlay.Marker
@@ -119,7 +123,11 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
     var rev by remember { mutableIntStateOf(0) }
     var myLoc by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var compassOn by remember { mutableStateOf(false) }
-    var routeMode by remember { mutableStateOf(false) }
+    /** 0 = off, 1 = by taps (straight segments), 2 = freehand. */
+    var drawMode by remember { mutableIntStateOf(0) }
+    var selRoute by remember { mutableStateOf<Route?>(null) }
+    var showRoutes by remember { mutableStateOf(false) }
+    var showSave by remember { mutableStateOf(false) }
     val heading = rememberHeading(compassOn)
 
     val mapView = remember {
@@ -151,8 +159,8 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                 map.overlays.clear()
                 map.overlays.add(MapEventsOverlay(object : MapEventsReceiver {
                     override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
-                        if (!routeMode) return false
-                        vm.route.add(p.latitude to p.longitude)
+                        if (drawMode != 1) return false
+                        vm.routeAdd(listOf(p.latitude to p.longitude))
                         rev++
                         return true
                     }
@@ -167,6 +175,17 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                     }
                 }))
                 rev // read so that point edits redraw the markers
+                // saved routes (visible ones); tap a line -> route menu
+                for (r in vm.routes) {
+                    if (!r.visible || r.pts.size < 2) continue
+                    val line = Polyline(map)
+                    line.setPoints(r.pts.map { (la, lo) -> GeoPoint(la, lo) })
+                    line.outlinePaint.color = parseColor(r.color)
+                    line.outlinePaint.strokeWidth = 7f
+                    line.setOnClickListener { _, _, _ -> if (drawMode == 0) { selRoute = r; true } else false }
+                    map.overlays.add(line)
+                }
+                // route being drawn
                 if (vm.route.isNotEmpty()) {
                     val line = Polyline(map)
                     line.setPoints(vm.route.map { (la, lo) -> GeoPoint(la, lo) })
@@ -174,7 +193,8 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                     line.outlinePaint.strokeWidth = 8f
                     line.setOnClickListener { _, _, _ -> false }
                     map.overlays.add(line)
-                    for ((la, lo) in vm.route) {
+                    val dots = if (vm.route.size <= 60) vm.route else listOf(vm.route.first(), vm.route.last())
+                    for ((la, lo) in dots) {
                         val v = Marker(map)
                         v.position = GeoPoint(la, lo)
                         v.setAnchor(0.5f, 0.5f)
@@ -212,6 +232,11 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                     m.setInfoWindow(null)
                     map.overlays.add(m)
                 }
+                if (drawMode == 2) {
+                    map.overlays.add(FreehandOverlay(AColor.parseColor("#f1c40f")) { stroke -> vm.routeAdd(stroke); rev++ })
+                }
+                drawMode // re-run when the mode changes
+                vm.routes.size
                 map.invalidate()
             },
         )
@@ -224,9 +249,13 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
         ) {
             if (label.isNotEmpty()) MapLabel(label)
             rev
-            if (routeMode || vm.route.size > 1) {
-                MapLabel("Маршрут: " + fmtDist(routeLength(vm.route)) + " · точок " + vm.route.size +
-                    if (routeMode && vm.route.isEmpty()) " · тапайте по карті" else "")
+            if (drawMode != 0 || vm.route.size > 1) {
+                MapLabel("Маршрут: " + fmtDist(routeLength(vm.route)) +
+                    when {
+                        drawMode == 1 && vm.route.isEmpty() -> " · тапайте по карті"
+                        drawMode == 2 && vm.route.isEmpty() -> " · ведіть пальцем"
+                        else -> ""
+                    })
             }
             if (vm.strikeCoordTarget) MapLabel("Ураження: довге натискання — координати цілі")
             if (compassOn && heading != null) MapLabel("курс " + heading.toInt() + "°")
@@ -252,13 +281,14 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                 }
             })
             MapIconBtn(Icons.Filled.Explore, "Компас", compassOn, onClick = { compassOn = !compassOn })
-            MapIconBtn(Icons.Filled.Timeline, "Маршрут", routeMode, onClick = { routeMode = !routeMode })
-            if (routeMode || vm.route.isNotEmpty()) {
-                MapIconBtn(Icons.AutoMirrored.Filled.Undo, "Крок назад", onClick = {
-                    if (vm.route.isNotEmpty()) { vm.route.removeAt(vm.route.lastIndex); rev++ }
-                })
-                MapIconBtn(Icons.Filled.LinearScale, "Очистити маршрут", onClick = { vm.route.clear(); rev++ })
+            MapIconBtn(Icons.Filled.Timeline, "Маршрут точками", drawMode == 1, onClick = { drawMode = if (drawMode == 1) 0 else 1 })
+            MapIconBtn(Icons.Filled.Gesture, "Маршрут від руки", drawMode == 2, onClick = { drawMode = if (drawMode == 2) 0 else 2 })
+            if (vm.route.isNotEmpty()) {
+                MapIconBtn(Icons.AutoMirrored.Filled.Undo, "Крок назад", onClick = { vm.routeUndo(); rev++ })
+                MapIconBtn(Icons.Filled.Save, "Зберегти маршрут", onClick = { showSave = true })
+                MapIconBtn(Icons.Filled.LinearScale, "Очистити маршрут", onClick = { vm.routeClear(); rev++ })
             }
+            MapIconBtn(Icons.Filled.Map, "Маршрути", onClick = { showRoutes = true })
             MapIconBtn(Icons.Filled.DeleteSweep, "Очистити точки", onClick = {
                 if (vm.points.isNotEmpty()) {
                     vm.clearPoints()
@@ -302,6 +332,28 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             },
             onDismiss = { selPoint = null },
         )
+    }
+
+    if (showRoutes) RoutesList(vm, { r -> selRoute = r; showRoutes = false }) { showRoutes = false }
+    selRoute?.let { r ->
+        RouteMenu(
+            vm, r,
+            onShow = {
+                if (r.pts.size > 1) mapView.post {
+                    mapView.zoomToBoundingBox(org.osmdroid.util.BoundingBox.fromGeoPoints(r.pts.map { (la, lo) -> GeoPoint(la, lo) }), true, 80)
+                }
+            },
+            onEdit = { vm.editRoute(r.id); drawMode = 1; rev++ },
+            onDismiss = { selRoute = null; rev++ },
+        )
+    }
+    if (showSave) {
+        val cur = vm.routes.firstOrNull { it.id == vm.routeEditId }
+        RouteSaveDialog(
+            "Зберегти маршрут · " + fmtDist(routeLength(vm.route)),
+            cur?.name ?: "", cur?.color ?: ROUTE_COLORS.first(),
+            { n, c -> vm.saveRoute(n, c); showSave = false; drawMode = 0; rev++ },
+        ) { showSave = false }
     }
 
     DisposableEffect(Unit) {
