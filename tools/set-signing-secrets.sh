@@ -1,35 +1,46 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Знаходить keystore, яким підписаний оригінальний Report (CN=Report, C=UA),
-# перевіряє відбиток і записує 4 секрети в GitHub (axiles126/Raport). Termux / Linux.
+# Ключ підпису для CI (axiles126/Raport).
+#   bash s.sh /шлях/до/старого.jks  -> перевіряє, що це ключ оригіналу (оновлення поверх без втрати даних)
+#   bash s.sh                       -> створює НОВИЙ постійний ключ (потрібне одноразове видалення старого Report)
 set -e
 REPO=axiles126/Raport
 WANT=4BFCBA9112D5861AE3051B4555D02C0A402AF4AEE5470EAC29556FDB8B469CD3
+DIR=$HOME/.report-keys; NEW=$DIR/report-release.jks; ALIAS=report
 
-command -v keytool >/dev/null || { pkg install -y openjdk-21 2>/dev/null || pkg install -y openjdk-17; }
+command -v keytool >/dev/null || pkg install -y openjdk-21
 command -v gh >/dev/null || pkg install -y gh
 gh auth status >/dev/null 2>&1 || gh auth login -h github.com -p https -w
+mkdir -p "$DIR"; chmod 700 "$DIR"
 
 KS="$1"
-if [ -z "$KS" ]; then
-  mapfile -t C < <(find ~ /sdcard /storage/emulated/0 -maxdepth 6 -type f \( -iname '*.jks' -o -iname '*.keystore' -o -iname '*.p12' -o -iname '*.pfx' \) 2>/dev/null | grep -v '/debug.keystore$' | sort -u)
-  [ ${#C[@]} -eq 0 ] && { echo "keystore не знайдено. Запусти: $0 /шлях/до/файлу.jks"; exit 1; }
-  echo "Знайдено:"; for i in "${!C[@]}"; do echo "  [$i] ${C[$i]}"; done
+if [ -n "$KS" ]; then
+  [ -f "$KS" ] || { echo "Нема файлу: $KS"; exit 1; }
+  read -rsp "Пароль keystore: " SP; echo
+  A=$(keytool -list -v -keystore "$KS" -storepass "$SP" 2>/dev/null | awk -v w="$WANT" '
+      /^Alias name:|^Псевдоним|^Ім.я псевдоніма/ {a=$NF} /SHA256:/ {gsub(/:/,"",$2); if (toupper($2)==w){print a; exit}}')
+  [ -z "$A" ] && { echo "Це НЕ ключ оригіналу (або пароль невірний). Без аргументу скрипт створить новий ключ."; exit 1; }
+  echo "OK: ключ оригіналу, alias=$A — APK ставитиметься поверх, дані збережуться."
+  read -rsp "Пароль ключа (Enter = такий самий): " KP; echo; KP=${KP:-$SP}
+else
+  if [ ! -f "$NEW" ]; then
+    SP=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)
+    keytool -genkeypair -keystore "$NEW" -storetype PKCS12 -alias $ALIAS -keyalg RSA -keysize 4096 \
+      -validity 10000 -dname "CN=Report, O=Report, C=UA" -storepass "$SP" -keypass "$SP" >/dev/null
+    printf '%s\n' "$SP" > "$DIR/password.txt"; chmod 600 "$DIR"/*
+    termux-setup-storage >/dev/null 2>&1 || true
+    mkdir -p /sdcard/Download/report-keys 2>/dev/null && cp "$NEW" "$DIR/password.txt" /sdcard/Download/report-keys/ 2>/dev/null \
+      && echo "Резервна копія: /sdcard/Download/report-keys/ — збережи її окремо (втрата = знову видаляти застосунок)."
+    echo "Створено новий ключ: $NEW"
+  else
+    echo "Використовую вже створений ключ: $NEW"
+  fi
+  KS=$NEW; A=$ALIAS; SP=$(cat "$DIR/password.txt"); KP=$SP
+  echo "УВАГА: перший раз старий Report треба видалити (інший підпис) — вильоти/шаблони зітруться. Далі всі збірки оновлюються поверх."
 fi
-read -rsp "Пароль keystore: " SP; echo
 
-pick() { # $1 = keystore; друкує alias, чий сертифікат = WANT
-  keytool -list -v -keystore "$1" -storepass "$SP" 2>/dev/null | awk -v w="$WANT" '
-    /^Alias name:|^Псевдоним|^Ім.я псевдоніма/ {a=$NF}
-    /SHA256:/ {gsub(/:/,"",$2); if (toupper($2)==w) {print a; exit}}'
-}
-if [ -z "$KS" ]; then for f in "${C[@]}"; do A=$(pick "$f"); [ -n "$A" ] && { KS="$f"; break; }; done
-else A=$(pick "$KS"); fi
-[ -z "$A" ] && { echo "Жоден keystore з цим паролем не містить ключ оригіналу (SHA-256 $WANT)."; exit 1; }
-echo "OK: $KS, alias=$A — відбиток збігається з оригінальним APK."
-
-read -rsp "Пароль ключа (Enter = такий самий): " KP; echo; KP=${KP:-$SP}
 base64 -w0 "$KS" | gh secret set RELEASE_KEYSTORE_B64 -R $REPO
 printf %s "$SP" | gh secret set RELEASE_STORE_PASSWORD -R $REPO
 printf %s "$A"  | gh secret set RELEASE_KEY_ALIAS -R $REPO
 printf %s "$KP" | gh secret set RELEASE_KEY_PASSWORD -R $REPO
-gh workflow run build.yml -R $REPO --ref decomp && echo "Секрети записані, збірку запущено."
+keytool -list -v -keystore "$KS" -storepass "$SP" 2>/dev/null | grep -m1 SHA256
+gh workflow run build.yml -R $REPO --ref decomp && echo "Секрети записані, збірку запущено. APK: гілка ci-log → app-release.apk"
