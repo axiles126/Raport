@@ -134,7 +134,7 @@ class PilotWatchService : AccessibilityService() {
     }
 
     companion object {
-        private const val DJI_PKG = "com.dji.industry.pilot"
+        const val DJI_PKG = "com.dji.industry.pilot"
 
         /** First non-null text in the node subtree (depth-first). */
         private fun nodeText(node: AccessibilityNodeInfo): String? {

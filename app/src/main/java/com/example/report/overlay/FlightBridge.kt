@@ -24,6 +24,8 @@ object FlightBridge {
     var landing: (() -> Unit)? = null
     var templates: (() -> List<String>)? = null
     var insertTemplate: ((String) -> Unit)? = null
+    /** Attaches MGRS to the last line of the active (or latest) flight. */
+    var attachCoords: ((String) -> Unit)? = null
 
     /** Set by [OverlayService]: refreshes the floating button icon. */
     var onStateChanged: (() -> Unit)? = null
@@ -78,5 +80,24 @@ object FlightBridge {
             )
             saveFlights(store, flights)
         }
+    }
+
+    /** Fallback for [attachCoords] when the app UI is not running: edits persisted flights. */
+    fun storeAttachCoords(context: Context, mgrs: String) {
+        val store = Store(context)
+        val flights = loadFlights(store)
+        val idx = flights.indexOfFirst { it.lt == null }.takeIf { it >= 0 } ?: flights.indices.maxByOrNull { flights[it].t } ?: return
+        val f = flights[idx]
+        flights[idx] = f.copy(c = attachToLastLine(f.c, mgrs) ?: f.c, mgrs = if (attachToLastLine(f.c, mgrs) == null) mgrs else f.mgrs)
+        saveFlights(store, flights)
+    }
+
+    /** "… за координатами MGRS" on the last text line; null if there is no text line. */
+    fun attachToLastLine(c: String, mgrs: String): String? {
+        val lines = ArrayList(c.split("\n"))
+        val i = lines.indexOfLast { Coords.TIME_RE.replace(it.trim(), "").let { t -> t.isNotEmpty() && !Coords.isCoord(t) } }
+        if (i < 0) return null
+        lines[i] = Coords.COORD_RE.replace(lines[i], "").trimEnd() + " за координатами " + mgrs
+        return lines.joinToString("\n")
     }
 }

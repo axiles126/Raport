@@ -258,6 +258,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         FlightBridge.landing = { landing(true) }
         FlightBridge.templates = { templates.toList() }
         FlightBridge.insertTemplate = { insertTemplate(it) }
+        FlightBridge.attachCoords = { attachCoordsToLast(it) }
 
         updatePreview(true)
 
@@ -307,6 +308,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         FlightBridge.landing = null
         FlightBridge.templates = null
         FlightBridge.insertTemplate = null
+        FlightBridge.attachCoords = null
     }
 
     // ==== lookups =============================================================================
@@ -606,6 +608,15 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         }
         afterData()
         emit(Op.InsertTemplate(text))
+    }
+
+    /** Coordinates from the floating panel: to the last text line of the flight, else to the flight itself. */
+    fun attachCoordsToLast(mgrs: String) {
+        val rec = activeRec() ?: flights.lastOrNull()
+        if (rec == null) { setStatus("Немає вильоту — спершу «Взліт»", "err"); return }
+        val lines = rec.c.split("\n")
+        val i = lines.indexOfLast { Coords.TIME_RE.replace(it.trim(), "").let { t -> t.isNotEmpty() && !Coords.isCoord(t) } }
+        if (i >= 0) { attachCoordsToLine(mgrs, i); setStatus("✓ Координати підставлено: $mgrs", "ok") } else attachCoordsToFlight(mgrs)
     }
 
     fun attachCoordsToFlight(mgrs: String) {

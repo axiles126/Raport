@@ -1,5 +1,11 @@
 package com.example.report.auto
 
+import com.example.report.data.Point
+
+import com.example.report.core.Mgrs
+
+import com.example.report.core.Coords
+
 import android.annotation.SuppressLint
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -179,6 +185,16 @@ class TemplateFab(private val svc: PilotWatchService) {
         root.addView(header)
 
         val list = LinearLayout(svc).apply { orientation = LinearLayout.VERTICAL }
+        list.addView(
+            TextView(svc).apply {
+                text = "📍 Координати"
+                setTextColor(0xFF4CAF50.toInt())
+                textSize = 15f
+                typeface = Typeface.create(mono, Typeface.BOLD)
+                setPadding(px(2), px(10), px(10), px(10))
+                setOnClickListener { openCoords() }
+            },
+        )
         val templates = FlightBridge.templates?.invoke()
             ?: store.load<List<String>>("kap_templates", emptyList())
         if (templates.isEmpty()) {
@@ -239,6 +255,106 @@ class TemplateFab(private val svc: PilotWatchService) {
         handler.postDelayed(autoHide, 15_000L)
     }
 
+    // ---- coordinates input -------------------------------------------------------------------
+
+    private var coordsWin: View? = null
+
+    /** Focusable mini-window: MGRS prefilled from DJI Pilot screen (or last map point), editable, «Додати». */
+    private fun openCoords() {
+        closePanel()
+        closeCoords()
+        val mono = Typeface.MONOSPACE
+        val (pre, src) = detectCoords()
+        val root = LinearLayout(svc).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(14), px(10), px(14), px(10))
+            background = bg(12)
+        }
+        root.addView(TextView(svc).apply {
+            text = "КООРДИНАТИ" + if (src.isNotEmpty()) " · $src" else ""
+            setTextColor(DIM); textSize = 12f; typeface = Typeface.create(mono, Typeface.BOLD)
+        })
+        val input = android.widget.EditText(svc).apply {
+            setText(pre)
+            hint = "37U DQ 12345 67890"
+            setHintTextColor(0xFF777777.toInt())
+            setTextColor(0xFFFFFFFF.toInt()); textSize = 17f; typeface = mono
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            setSelection(text.length)
+        }
+        root.addView(input, LinearLayout.LayoutParams(px(260), LinearLayout.LayoutParams.WRAP_CONTENT))
+        val buttons = LinearLayout(svc).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
+        buttons.addView(TextView(svc).apply {
+            text = "Скасувати"; setTextColor(DIM); textSize = 15f
+            setPadding(px(10), px(10), px(14), px(6)); setOnClickListener { closeCoords() }
+        })
+        buttons.addView(TextView(svc).apply {
+            text = "ДОДАТИ"; setTextColor(0xFF4CAF50.toInt()); textSize = 15f; typeface = Typeface.create(mono, Typeface.BOLD)
+            setPadding(px(14), px(10), px(4), px(6))
+            setOnClickListener {
+                val m = Coords.fmtMGRS(input.text.toString().trim().uppercase().replace(Regex("\\s+"), ""))
+                    .ifEmpty { input.text.toString().trim() }
+                if (m.isNotEmpty()) {
+                    FlightBridge.attachCoords?.invoke(m) ?: FlightBridge.storeAttachCoords(svc, m)
+                    FlightBridge.onStateChanged?.invoke()
+                    Toast.makeText(svc, "✓ Координати: $m", Toast.LENGTH_SHORT).show()
+                }
+                closeCoords()
+            }
+        })
+        root.addView(buttons)
+        val lp = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.CENTER
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
+        }
+        if (runCatching { wm.addView(root, lp) }.isFailure) return
+        coordsWin = root
+        input.requestFocus()
+        handler.postDelayed({
+            (svc.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+                ?.showSoftInput(input, 0)
+        }, 150)
+    }
+
+    fun closeCoords() {
+        coordsWin?.let { runCatching { wm.removeView(it) } }
+        coordsWin = null
+    }
+
+    /**
+     * Coordinates shown on the DJI Pilot 2 screen (e.g. laser-ranging target): MGRS text, or a
+     * decimal "lat, lng" pair → MGRS. Falls back to the last point placed on the Report map.
+     */
+    private fun detectCoords(): Pair<String, String> {
+        val texts = ArrayList<String>()
+        fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, depth: Int) {
+            if (n == null || depth > 40) return
+            n.text?.toString()?.takeIf { it.isNotBlank() }?.let { texts += it }
+            n.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { texts += it }
+            for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
+        }
+        runCatching { svc.windows.forEach { w -> if (w.root?.packageName?.toString() == PilotWatchService.DJI_PKG) walk(w.root, 0) } }
+        if (texts.isEmpty()) runCatching { walk(svc.rootInActiveWindow, 0) }
+        val joined = texts.joinToString("  ")
+        MGRS_ANY.find(joined)?.let { return Coords.fmtMGRS(it.value.uppercase().replace(Regex("\\s+"), "")) to "з DJI" }
+        LATLNG.find(joined)?.let { m ->
+            var lat = m.groupValues[1].toDouble(); var lng = m.groupValues[3].toDouble()
+            if (m.groupValues[2].equals("S", true)) lat = -lat
+            if (m.groupValues[4].equals("W", true)) lng = -lng
+            if (lat in -80.0..84.0 && lng in -180.0..180.0) return Coords.fmtMGRS(Mgrs.forward(lng, lat)) to "з DJI"
+        }
+        val pts = store.load<List<Point>>("kap_points", emptyList())
+        pts.lastOrNull()?.let { p -> return (p.mgrs.ifEmpty { Coords.fmtMGRS(Mgrs.forward(p.lng, p.lat)) }) to "остання точка карти" }
+        return "" to ""
+    }
+
     private fun pick(text: String) {
         closePanel()
         FlightBridge.insertTemplate?.invoke(text) ?: FlightBridge.storeInsertTemplate(svc, text)
@@ -258,6 +374,9 @@ class TemplateFab(private val svc: PilotWatchService) {
     }
 
     private companion object {
+        val MGRS_ANY = Regex("\\b\\d{1,2}\\s?[C-X]\\s?[A-Z]{2}\\s?\\d{4,5}\\s?\\d{4,5}\\b")
+        /** "48.123456, 37.654321" / "N48.123456 E37.654321" / "48.1234°N 37.6543°E" */
+        val LATLNG = Regex("[NS]?\\s?(\\d{1,2}\\.\\d{4,})\\s?°?\\s?([NS])?[,;\\s]+[EW]?\\s?(\\d{1,3}\\.\\d{4,})\\s?°?\\s?([EW])?", RegexOption.IGNORE_CASE)
         const val BG = 0xE6121212.toInt()
         const val STROKE = 0xFF3A3A3A.toInt()
         const val DIM = 0xFFB0B0B0.toInt()
