@@ -1130,8 +1130,10 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun updateSchedule(id: String, transform: (ScheduledSend) -> ScheduledSend) {
         val i = schedules.indexOfFirst { it.id == id }
         if (i < 0) return
+        val was = schedules[i].enabled
         schedules[i] = transform(schedules[i])
         saveSchedules()
+        if (!was && schedules[i].enabled) ReportAlarmReceiver.ensureExactAllowed(getApplication<Application>())
         try {
             ReportAlarmReceiver.rescheduleAll(getApplication<Application>())
         } catch (_: Throwable) {

@@ -3,7 +3,6 @@
 mkdir -p smoke
 git fetch -q --depth 1 origin orig-apk && git show FETCH_HEAD:original.apk > /tmp/orig.apk
 NEW=$(ls app/build/outputs/apk/release/*.apk | head -1)
-PKG=com.example.report
 
 tap() { # tap element by text or content-desc
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
@@ -21,12 +20,12 @@ PY
 shot() { adb exec-out screencap -p > smoke/${TAG}_$1.png; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb shell cat /sdcard/ui.xml > smoke/${TAG}_$1.xml; }
 
 run() {
-  TAG=$1; APK=$2
+  TAG=$1; APK=$2; PKG=$3
   adb uninstall $PKG >/dev/null 2>&1
   adb install -r -g "$APK" > smoke/${TAG}_install.txt 2>&1
   adb shell appops set $PKG SYSTEM_ALERT_WINDOW deny
   adb logcat -c
-  adb shell am start -W -n $PKG/.MainActivity >/dev/null; sleep 8
+  adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 8
   for p in "Дозволити" "Allow" "ОК" "OK"; do tap "$p" >/dev/null; done; sleep 1
   shot 1_main
   { tap "ВЗЛІТ ПІШОВ"; sleep 4; shot 2_flying
@@ -40,6 +39,28 @@ run() {
   adb logcat -d -b crash > smoke/${TAG}_crash.txt
   echo "$TAG pid=$PID crashlog=$(wc -c < smoke/${TAG}_crash.txt)" >> smoke/result.txt
 }
-run orig /tmp/orig.apk
-run new "$NEW"
+run orig /tmp/orig.apk com.example.report
+run new "$NEW" io.github.axiles126.report
+
+# --- cleartext check: app (new build) as sync client -> fake hub on host via adb reverse ---
+pip install -q websockets >/dev/null 2>&1
+cat > /tmp/hub.py <<'PY'
+import asyncio, websockets
+async def h(ws):
+    m = await ws.recv(); open('smoke/hub_got.txt','w').write(m[:80]); await ws.close()
+async def main():
+    async with websockets.serve(h, "127.0.0.1", 8777): await asyncio.sleep(90)
+asyncio.run(main())
+PY
+python3 /tmp/hub.py & HUB=$!
+adb reverse tcp:8777 tcp:8777
+TAG=sync; PKG=io.github.axiles126.report
+adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 3
+{ tap "Меню"; sleep 2; tap "Синхронізація"; sleep 2; shot 1_net
+  tap "IP хаба (напр. 192.168.0.5)"; adb shell input text 127.0.0.1; sleep 1
+  tap "Код (XXXX-XXXX-XXXX-XXXX)"; adb shell input text ABCD-EFGH-JKMN-PQRS; sleep 1
+  adb shell input keyevent 111; sleep 1
+  tap "Підключитися"; sleep 8; shot 2_after; } > smoke/sync_steps.txt 2>&1
+kill $HUB 2>/dev/null
+echo "sync hub_got=$(cat smoke/hub_got.txt 2>/dev/null || echo NONE)" >> smoke/result.txt
 exit 0

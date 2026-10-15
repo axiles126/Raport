@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- All external traffic (ArcGIS tiles, wa.me) is HTTPS. LAN sync (ws://<hub>:8777) runs over Ktor CIO raw
+     sockets, which are not subject to this policy, and is end-to-end encrypted (AES-GCM) by the app itself. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+</network-security-config>

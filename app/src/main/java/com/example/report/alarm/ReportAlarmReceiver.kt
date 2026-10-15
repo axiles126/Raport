@@ -139,6 +139,21 @@ class ReportAlarmReceiver : BroadcastReceiver() {
             }
         }
 
+        /** Without USE_EXACT_ALARM, Android 14+ denies exact alarms by default — open the toggle once. */
+        fun ensureExactAllowed(context: Context) {
+            if (Build.VERSION.SDK_INT < 31) return
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (am.canScheduleExactAlarms()) return
+            try {
+                context.startActivity(
+                    Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        android.net.Uri.parse("package:" + context.packageName))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (_: Throwable) {
+            }
+        }
+
         fun rescheduleAll(context: Context) {
             Store(context).load<List<ScheduledSend>>("kap_schedules", emptyList())
                 .forEach { schedule(context, it) }

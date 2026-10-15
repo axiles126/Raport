@@ -12,7 +12,9 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.report"
+        // Code namespace stays com.example.report: the sync protocol serializes class names
+        // ("com.example.report.sync.Op.*"), so phones with the original build stay compatible.
+        applicationId = "io.github.axiles126.report"
         minSdk = 29
         targetSdk = 37
         versionCode = 17
