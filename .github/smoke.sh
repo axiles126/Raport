@@ -36,7 +36,7 @@ run() {
     tap "Інструкція"; sleep 2; shot 7_guide; adb shell input keyevent 4; sleep 1
     adb shell am start -n $PKG/com.example.report.MainActivity >/dev/null; sleep 2
     tap "Ураження"; sleep 2; shot 12_strike; adb shell input keyevent 4; sleep 1
-    tap "Карта"; sleep 4; tap "Маршрут точками"; sleep 1; adb shell input tap 100 300; sleep 1; adb shell input tap 200 380; sleep 1; adb shell input tap 150 480; sleep 2; shot 13_route; tap "Зберегти маршрут"; sleep 1; adb shell input text Test1; tap "Зберегти"; sleep 2; tap "Маршрути"; sleep 2; shot 14_routes; adb shell input keyevent 4; sleep 1; adb shell input keyevent 4; sleep 1
+    tap "Карта"; sleep 4; tap "Малювання"; sleep 1; tap "▢"; sleep 1; adb shell input tap 100 300; sleep 1; adb shell input tap 200 380; sleep 1; adb shell input tap 150 480; sleep 2; shot 13_route; tap "Зберегти маршрут"; sleep 1; adb shell input text Test1; tap "Зберегти"; sleep 2; sleep 1; shot 14_area_saved; tap "Малювання"; sleep 1; tap "☰"; sleep 2; shot 15_routes; adb shell input keyevent 4; sleep 1; adb shell input keyevent 4; sleep 1
     tap "ДРОН"; sleep 2; shot 8_dronemenu; tap "Списки / вручну / поділитися"; sleep 2; tap "Вручну"; sleep 2
     tap "4 цифри (в дужках)"; adb shell input text 0417; tap "Номер (QR або вручну)"; adb shell input text 1581F6Q8D24B0012; adb shell input keyevent 111; sleep 1
     shot 9_droneentry; tap "Зберегти"; sleep 2; shot 10_dronelist; tap "ПОДІЛИТИСЯ"; sleep 3; shot 11_share; adb shell input keyevent 4; sleep 1; adb shell input keyevent 4; sleep 1

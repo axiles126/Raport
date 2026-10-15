@@ -10,4 +10,6 @@ data class Route(
     val color: String = "#f1c40f",
     val pts: List<Pair<Double, Double>> = emptyList(),
     val visible: Boolean = true,
+    /** true = closed area (polygon outline + light fill + name label inside). */
+    val closed: Boolean = false,
 )

@@ -81,6 +81,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Polyline
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Map
@@ -129,6 +130,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
     var selRoute by remember { mutableStateOf<Route?>(null) }
     var showRoutes by remember { mutableStateOf(false) }
     var showSave by remember { mutableStateOf(false) }
+    var showDrawMenu by remember { mutableStateOf(false) }
     val heading = rememberHeading(compassOn)
 
     val mapView = remember {
@@ -179,21 +181,53 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                 // saved routes (visible ones); tap a line -> route menu
                 for (r in vm.routes) {
                     if (!r.visible || r.pts.size < 2) continue
-                    val line = Polyline(map)
-                    line.setPoints(r.pts.map { (la, lo) -> GeoPoint(la, lo) })
-                    line.outlinePaint.color = parseColor(r.color)
-                    line.outlinePaint.strokeWidth = 7f
-                    line.setOnClickListener { _, _, _ -> if (drawMode == 0) { selRoute = r; true } else false }
-                    map.overlays.add(line)
+                    val col = parseColor(r.color)
+                    val geo = r.pts.map { (la, lo) -> GeoPoint(la, lo) }
+                    if (r.closed && r.pts.size >= 3) {
+                        val pg = org.osmdroid.views.overlay.Polygon(map)
+                        pg.points = geo + geo.first()
+                        pg.outlinePaint.color = col
+                        pg.outlinePaint.strokeWidth = 6f
+                        pg.fillPaint.color = (col and 0x00FFFFFF) or 0x22000000
+                        pg.setOnClickListener { _, _, _ -> if (drawMode == 0) { selRoute = r; true } else false }
+                        map.overlays.add(pg)
+                    } else {
+                        val line = Polyline(map)
+                        line.setPoints(geo)
+                        line.outlinePaint.color = col
+                        line.outlinePaint.strokeWidth = 7f
+                        line.setOnClickListener { _, _, _ -> if (drawMode == 0) { selRoute = r; true } else false }
+                        map.overlays.add(line)
+                    }
+                    // name label (like DJI Pilot): inside the area / at the middle of the route
+                    val lm = Marker(map)
+                    val (la, lo) = labelPos(r)
+                    lm.position = GeoPoint(la, lo)
+                    lm.icon = BitmapDrawable(context.resources, labelBitmap(r.name, col, context.resources.displayMetrics.density))
+                    lm.setAnchor(0.5f, 0.5f)
+                    lm.setInfoWindow(null)
+                    lm.setOnMarkerClickListener { _, _ -> if (drawMode == 0) { selRoute = r; true } else false }
+                    map.overlays.add(lm)
                 }
                 // route being drawn
                 if (vm.route.isNotEmpty()) {
-                    val line = Polyline(map)
-                    line.setPoints(vm.route.map { (la, lo) -> GeoPoint(la, lo) })
-                    line.outlinePaint.color = AColor.parseColor("#f1c40f")
-                    line.outlinePaint.strokeWidth = 8f
-                    line.setOnClickListener { _, _, _ -> false }
-                    map.overlays.add(line)
+                    val geo = vm.route.map { (la, lo) -> GeoPoint(la, lo) }
+                    if (vm.drawClosed && geo.size >= 3) {
+                        val pg = org.osmdroid.views.overlay.Polygon(map)
+                        pg.points = geo + geo.first()
+                        pg.outlinePaint.color = AColor.parseColor("#f1c40f")
+                        pg.outlinePaint.strokeWidth = 7f
+                        pg.fillPaint.color = 0x22f1c40f
+                        pg.setOnClickListener { _, _, _ -> false }
+                        map.overlays.add(pg)
+                    } else {
+                        val line = Polyline(map)
+                        line.setPoints(geo)
+                        line.outlinePaint.color = AColor.parseColor("#f1c40f")
+                        line.outlinePaint.strokeWidth = 8f
+                        line.setOnClickListener { _, _, _ -> false }
+                        map.overlays.add(line)
+                    }
                     val dots = if (vm.route.size <= 60) vm.route else listOf(vm.route.first(), vm.route.last())
                     for ((la, lo) in dots) {
                         val v = Marker(map)
@@ -251,7 +285,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             if (label.isNotEmpty()) MapLabel(label)
             rev
             if (drawMode != 0 || vm.route.size > 1) {
-                MapLabel("Маршрут: " + fmtDist(routeLength(vm.route)) +
+                MapLabel((if (vm.drawClosed) "Область: " else "Маршрут: ") + shapeInfo(vm.route, vm.drawClosed) +
                     when {
                         drawMode == 1 && vm.route.isEmpty() -> " · тапайте по карті"
                         drawMode == 2 && vm.route.isEmpty() -> " · ведіть пальцем"
@@ -283,9 +317,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                 }
             })
             MapIconBtn(Icons.Filled.Explore, "Компас", compassOn, onClick = { compassOn = !compassOn })
-            MapIconBtn(Icons.Filled.Timeline, "Маршрут точками", drawMode == 1, onClick = { drawMode = if (drawMode == 1) 0 else 1 })
-            MapIconBtn(Icons.Filled.Gesture, "Маршрут від руки", drawMode == 2, onClick = { drawMode = if (drawMode == 2) 0 else 2 })
-            MapIconBtn(Icons.Filled.Map, "Маршрути", onClick = { showRoutes = true })
+            MapIconBtn(Icons.Filled.Edit, "Малювання", drawMode != 0, onClick = { showDrawMenu = true })
             MapIconBtn(Icons.Filled.DeleteSweep, "Очистити точки", onClick = {
                 if (vm.points.isNotEmpty()) {
                     vm.clearPoints()
@@ -344,6 +376,12 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
         )
     }
 
+    if (showDrawMenu) DrawMenu(
+        drawMode, vm.drawClosed, vm.route.isNotEmpty(),
+        onPick = { m, closed -> drawMode = m; vm.drawClosed = closed; showDrawMenu = false; rev++ },
+        onSaved = { showDrawMenu = false; showRoutes = true },
+        onStop = { drawMode = 0; showDrawMenu = false; rev++ },
+    ) { showDrawMenu = false }
     if (showRoutes) RoutesList(vm, { r -> selRoute = r; showRoutes = false }) { showRoutes = false }
     selRoute?.let { r ->
         RouteMenu(
@@ -360,7 +398,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
     if (showSave) {
         val cur = vm.routes.firstOrNull { it.id == vm.routeEditId }
         RouteSaveDialog(
-            "Зберегти маршрут · " + fmtDist(routeLength(vm.route)),
+            (if (vm.drawClosed) "Зберегти область · " else "Зберегти маршрут · ") + shapeInfo(vm.route, vm.drawClosed),
             cur?.name ?: "", cur?.color ?: ROUTE_COLORS.first(),
             { n, c -> vm.saveRoute(n, c); showSave = false; drawMode = 0; rev++ },
         ) { showSave = false }

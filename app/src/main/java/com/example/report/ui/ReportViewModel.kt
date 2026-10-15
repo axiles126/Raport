@@ -137,6 +137,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     /** Route being drawn on the map (lat, lng); [routeStrokes] = start index of each tap/stroke (for undo). */
     val route = mutableStateListOf<Pair<Double, Double>>()
     val routeStrokes = mutableStateListOf<Int>()
+    /** What is being drawn: false = route (line), true = closed area. */
+    var drawClosed by mutableStateOf(false)
     /** Id of the saved route loaded for editing (null = new). */
     var routeEditId by mutableStateOf<String?>(null)
     /** Saved routes, persisted. */
@@ -873,13 +875,13 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Saves the route being drawn (new or the one loaded for editing) and clears the drawing. */
     fun saveRoute(name: String, color: String) {
-        if (route.size < 2) return
-        val nm = name.trim().ifEmpty { "Маршрут " + (routes.size + 1) }
+        if (route.size < (if (drawClosed) 3 else 2)) return
+        val nm = name.trim().ifEmpty { (if (drawClosed) "Область " else "Маршрут ") + (routes.size + 1) }
         val i = routes.indexOfFirst { it.id == routeEditId }
-        val r = Route(routeEditId ?: ("r" + System.currentTimeMillis().toString(36)), nm, color, route.toList(), true)
+        val r = Route(routeEditId ?: ("r" + System.currentTimeMillis().toString(36)), nm, color, route.toList(), true, drawClosed)
         if (i >= 0) routes[i] = r else routes.add(r)
         saveRoutes(); routeClear()
-        setStatus("✓ Маршрут «$nm» збережено", "ok")
+        setStatus((if (r.closed) "✓ Область «" else "✓ Маршрут «") + nm + "» збережено", "ok")
     }
 
     fun updateRoute(id: String, name: String? = null, color: String? = null) {
@@ -903,7 +905,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     /** Loads a saved route into the drawing for editing (save overwrites it). */
     fun editRoute(id: String) {
         val r = routes.firstOrNull { it.id == id } ?: return
-        routeClear(); routeAdd(r.pts); routeEditId = id
+        routeClear(); routeAdd(r.pts); routeEditId = id; drawClosed = r.closed
     }
 
     // ==== «Ураження»: separate report ======================================================
