@@ -1,0 +1,27 @@
+name: build
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: android-actions/setup-android@v3
+      - name: SDK 37
+        run: yes | sdkmanager --licenses >/dev/null; sdkmanager "platforms;android-37" "build-tools;37.0.0" || sdkmanager --list | grep -E "platforms;android-3[6-9]|build-tools;3[6-9]" | head
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: current }
+      - name: assembleDebug
+        run: gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: errors
+        if: failure()
+        run: grep -E "^e: |error:|What went wrong" -A3 build.log | head -300
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with: { name: Report-debug, path: app/build/outputs/apk/debug/*.apk }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: build-log, path: build.log }

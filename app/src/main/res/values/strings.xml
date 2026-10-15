@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Report</string>
+    <string name="pilot_watch_name">Report: авто взліт/посадка (DJI Pilot 2)</string>
+    <string name="pilot_watch_desc">Report читає лише рядок стану дрона в DJI Pilot 2 («Готовність до польоту», «Ручне керування» тощо) і сам відмічає взліт і посадку. Інший вміст екрана не читається і нікуди не передається.</string>
+</resources>
