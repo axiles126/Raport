@@ -11,7 +11,7 @@ tap() { # tap element by text or content-desc
 import sys,re,xml.etree.ElementTree as E
 t=sys.argv[1]
 for n in E.parse('/tmp/ui.xml').iter('node'):
-  if n.get('text')==t or n.get('content-desc')==t:
+  if (n.get('text') or '').startswith(t) or n.get('content-desc')==t:
     x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds'))); print((x1+x2)//2,(y1+y2)//2); break
 PY
 )
@@ -56,7 +56,9 @@ python3 /tmp/hub.py & HUB=$!
 adb reverse tcp:8777 tcp:8777
 TAG=sync; PKG=io.github.axiles126.report
 adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 3
-{ tap "Меню"; sleep 2; tap "Синхронізація"; sleep 2; shot 1_net
+{ tap "Меню"; sleep 2
+  for i in 1 2 3 4 5; do tap "Синхронізація" | grep -q "^tap" && break; adb shell input swipe 120 560 120 160 300; sleep 1; done
+  sleep 2; shot 1_net
   tap "IP хаба (напр. 192.168.0.5)"; adb shell input text 127.0.0.1; sleep 1
   tap "Код (XXXX-XXXX-XXXX-XXXX)"; adb shell input text ABCD-EFGH-JKMN-PQRS; sleep 1
   adb shell input keyevent 111; sleep 1
