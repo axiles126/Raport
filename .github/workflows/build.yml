@@ -23,7 +23,7 @@ jobs:
       - name: assembleDebug
         run: |
           set -o pipefail
-          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
+          gradle :app:assembleDebug --no-daemon 2>&1 | tee build.log
       - name: errors
         if: failure()
         run: |
