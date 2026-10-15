@@ -21,6 +21,29 @@ object ReportBuilder {
     private data class Ev(val t: Long, val t2: Long?, val text: String, val mgrs: String)
 
     const val POS_BG = "Позиція БГ"
+    private val LEAD_HM = Regex("^\\s*(\\d{1,2}):(\\d{2})")
+
+    /** Moments of loss: each "HH:MM Втрата дрону …" comment line, dated relative to the flight's takeoff. */
+    fun lossTimes(flights: List<Flight>): List<Long> = flights.flatMap { f ->
+        f.c.split("\n").filter { Loss.LOSS_RE.containsMatchIn(it) }.map { line ->
+            val m = LEAD_HM.find(line)
+            if (m == null) f.lt ?: f.t
+            else {
+                val cal = java.util.Calendar.getInstance().apply {
+                    timeInMillis = f.t
+                    set(java.util.Calendar.HOUR_OF_DAY, m.groupValues[1].toInt())
+                    set(java.util.Calendar.MINUTE, m.groupValues[2].toInt())
+                    set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+                }
+                var ts = cal.timeInMillis
+                if (ts < f.t - 60_000L) ts += DAY // lost after midnight
+                ts
+            }
+        }
+    }
+
+    /** Losses whose moment of loss falls into [from, to) — a loss counts only in its own day/night report. */
+    fun lossesIn(flights: List<Flight>, from: Long, to: Long): Int = lossTimes(flights).count { it in from until to }
     private val TIME_RANGE = Regex("^\\s*\\d{1,2}:\\d{2}-\\d{1,2}:\\d{2}")
     private val NUM_PREFIX = Regex("^\\s*\\d+\\s*[.)]\\s*")
 
@@ -41,7 +64,8 @@ object ReportBuilder {
         val tail = items.filter { tailIdx(it) >= 0 }.sortedBy { tailIdx(it) }
             .let { t -> if (t.any { tailIdx(it) == tailKeys.lastIndex }) t else t + POS_BG }
         val body = items.filter { tailIdx(it) < 0 } + tail
-        return (lines.take(h + 1) + body.mapIndexed { n, s -> "${n + 1}. $s" }).joinToString("\n")
+        val numbered = body.filter { tailIdx(it) != tailKeys.lastIndex }.mapIndexed { n, s -> "${n + 1}. $s" }
+        return (lines.take(h + 1) + numbered + POS_BG).joinToString("\n")
     }
 
     fun build(input: ReportInput): String = when (input.mode) {
@@ -369,7 +393,7 @@ object ReportBuilder {
             i++
         }
 
-        out += "$i. Втрати БпЛА - ${cfg.lost}"
+        out += "$i. Втрати БпЛА - ${lossesIn(input.flights, from, to) + cfg.lost}"
         out += "${i + 1}. Пошкодження БпЛА - ${cfg.dmg}"
         val props = cfg.props.filter { it.name.isNotEmpty() }
             .ifEmpty { listOf(NamedQty("Тип А"), NamedQty("Тип Б")) }
@@ -377,7 +401,7 @@ object ReportBuilder {
         val drones = cfg.drones.filter { it.name.isNotEmpty() }
         out += "${i + 3}. Дронів на позиції " +
             if (drones.isNotEmpty()) drones.joinToString(", ") { "\"${it.name}\" ${it.qty} шт" } else "- 0 шт"
-        out += "${i + 4}. $POS_BG"
+        out += POS_BG
 
         return out.joinToString("\n")
     }

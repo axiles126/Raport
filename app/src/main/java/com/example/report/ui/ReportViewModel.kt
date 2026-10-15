@@ -177,6 +177,12 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         fields.addAll(store.load<List<Field>>("kap_fields", emptyList()))
         points.addAll(store.load<List<Point>>("kap_points", emptyList()))
         dayCfg = store.load<DayCfg>("kap_daycfg", DayCfg())
+        if (!sp.getBoolean("kap_lost_auto", false)) {
+            // v2.8: losses are now counted automatically by time; dayCfg.lost is only a manual extra.
+            dayCfg = dayCfg.copy(lost = 0)
+            store.putStringNow("kap_daycfg", store.json.encodeToString(DayCfg.serializer(), dayCfg))
+            sp.edit().putBoolean("kap_lost_auto", true).apply()
+        }
         name = sp.getString("kap_name", "") ?: ""
         leader = sp.getString("kap_leader", "") ?: ""
         mode = sp.getString("kap_reportmode", "current") ?: "current"
@@ -698,7 +704,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val prev = origComment.trimEnd()
         setFlightComment(rec.t, if (prev.isEmpty()) line else prev + "\n" + line)
         if (hasActiveFlight()) landing(false)
-        setDayLost(dayCfg.lost + 1)
+        // Loss is counted in day/night reports by its own time (ReportBuilder.lossesIn), not via dayCfg.lost.
 
         val coords = rec.mgrs.ifEmpty {
             origComment.split("\n")
@@ -708,7 +714,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val pilot = (store.sp.getString("kap_loss_pilot", "") ?: "").ifEmpty { leader }
         val drone = store.sp.getString("kap_loss_drone", "3МБ") ?: "3МБ"
         lossDraft = LossDraft(rec.t, cause, at, coords, pilot, drone)
-        setStatus("Втрату борту відмічено · Втрати БпЛА: " + dayCfg.lost, "err")
+        setStatus("Втрату борту відмічено о " + TimeFmt.hm(at) + " · піде у звіт «День/Ніч» за часом втрати", "err")
     }
 
     /** Updates the loss draft; pilot/drone are remembered for next time. */

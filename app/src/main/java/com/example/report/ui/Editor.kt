@@ -137,7 +137,7 @@ fun ShiftSettings(vm: ReportViewModel) {
 fun DayNightSummary(vm: ReportViewModel) {
     val cs = MaterialTheme.colorScheme
     ehead("ЗВЕДЕННЯ ЗМІНИ")
-    Stepper("Втрати БпЛА", vm.dayCfg.lost) { vm.setDayLost(it) }
+    Stepper("Втрати БпЛА (+ вручну)", vm.dayCfg.lost) { vm.setDayLost(it) }
     Stepper("Пошкодження", vm.dayCfg.dmg) { vm.setDayDmg(it) }
     Spacer(Modifier.height(6.dp))
 

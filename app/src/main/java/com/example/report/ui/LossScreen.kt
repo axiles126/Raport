@@ -152,7 +152,7 @@ fun LossScreen(
 
             HorizontalDivider(color = cs.outline)
             Text(
-                "Посадку відмічено · у «День/Ніч» Втрати БпЛА: " + vm.dayCfg.lost,
+                "Посадку відмічено · втрата піде у звіт «День/Ніч» за часом втрати",
                 Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 color = cs.onSurfaceVariant,
                 fontSize = 11.sp,
