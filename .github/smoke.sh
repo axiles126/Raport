@@ -53,7 +53,7 @@ pip install -q websockets >/dev/null 2>&1
 cat > /tmp/hub.py <<'PY'
 import asyncio, websockets
 async def h(ws):
-    m = await ws.recv(); open('smoke/hub_got.txt','w').write(m[:80]); await ws.close()
+    m = await ws.recv(); open('smoke/hub_got.txt','a').write(m[:80] + "\n"); await ws.close()
 async def main():
     async with websockets.serve(h, "127.0.0.1", 8777): await asyncio.sleep(90)
 asyncio.run(main())
@@ -68,7 +68,7 @@ adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 
   tap "IP хаба (напр. 192.168.0.5)"; sleep 1; adb shell input text 127.0.0.1; adb shell input keyevent 111; sleep 1
   tap "Код (XXXX-XXXX-XXXX-XXXX)"; sleep 1; adb shell input text ABCDEFGHJKMNPQRS; adb shell input keyevent 111; sleep 1
   shot 1b_filled
-  tap "Підключитися"; sleep 8; shot 2_after; } > smoke/sync_steps.txt 2>&1
+  tap "Підключитися"; sleep 20; shot 2_after; } > smoke/sync_steps.txt 2>&1
 kill $HUB 2>/dev/null
-echo "sync hub_got=$(cat smoke/hub_got.txt 2>/dev/null || echo NONE)" >> smoke/result.txt
+echo "sync connections=$(wc -l < smoke/hub_got.txt 2>/dev/null || echo 0) first=$(head -1 smoke/hub_got.txt 2>/dev/null)" >> smoke/result.txt
 exit 0
