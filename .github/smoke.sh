@@ -35,8 +35,10 @@ run() {
     tap "Меню"; sleep 2; shot 6_menu; adb shell input keyevent 4; sleep 1
     tap "Інструкція"; sleep 2; shot 7_guide; adb shell input keyevent 4; sleep 1
     adb shell am start -n $PKG/com.example.report.MainActivity >/dev/null; sleep 2
-    tap "ЗАЇХАВ ДРОН"; sleep 4; shot 8_dronescan; adb shell input keyevent 4; sleep 2
-    tap "список · 0"; sleep 2; shot 9_dronelist; adb shell input keyevent 4; sleep 1
+    tap "ЗАЇХАВ"; sleep 4; shot 8_dronescan; adb shell input keyevent 4; sleep 2
+    tap "список"; sleep 2; tap "Вручну"; sleep 2
+    tap "4 цифри (в дужках)"; adb shell input text 0417; tap "Номер (QR або вручну)"; adb shell input text 1581F6Q8D24B0012; adb shell input keyevent 111; sleep 1
+    shot 9_droneentry; tap "Зберегти"; sleep 2; shot 10_dronelist; adb shell input keyevent 4; sleep 1
   } > smoke/${TAG}_steps.txt 2>&1
   PID=$(adb shell pidof $PKG | tr -d '\r')
   adb logcat -d -b crash > smoke/${TAG}_crash.txt

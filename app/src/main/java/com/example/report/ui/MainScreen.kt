@@ -110,6 +110,7 @@ fun MainScreen(
 ) {
     var showTemplates by remember { mutableStateOf(false) }
     var showDrones by remember { mutableStateOf(false) }
+    var droneDraft by remember { mutableStateOf<DroneDraft?>(null) }
     var deleteTemplates by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
     var showGuide by remember { mutableStateOf(false) }
@@ -209,22 +210,25 @@ fun MainScreen(
                                 )
                             }
                         }
-                        // ---- «Заїхав дрон»: QR scan -> separate list/report (not in shift reports) ----
+                        // ---- «Заїхав / Переданий дрон»: QR -> entry dialog -> separate lists ----
+                        var scanKind by remember { mutableStateOf(DRONE_IN) }
                         val droneScan = rememberLauncherForActivityResult(ScanContract()) { r ->
-                            r.contents?.let { vm.droneArrived(it) }
+                            r.contents?.let { droneDraft = DroneDraft(-1, scanKind, vm.droneModel, "", it.trim()) }
                         }
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TextButton(onClick = { droneScan.launch(droneScanOptions()) }) {
-                                Icon(Icons.Filled.QrCodeScanner, null, tint = cs.primary)
-                                Spacer(Modifier.width(6.dp))
-                                Text("ЗАЇХАВ ДРОН", color = cs.primary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            for ((k, label) in listOf(DRONE_IN to "ЗАЇХАВ", DRONE_OUT to "ПЕРЕДАНО")) {
+                                TextButton(onClick = { scanKind = k; droneScan.launch(droneScanOptions()) }) {
+                                    Icon(Icons.Filled.QrCodeScanner, null, tint = cs.primary)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(label, color = cs.primary, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                                }
                             }
                             TextButton(onClick = { showDrones = true }) {
-                                Text("список · ${vm.droneIns.size}", color = cs.onSurfaceVariant, fontSize = 13.sp)
+                                Text("список", color = cs.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, softWrap = false)
                             }
                         }
                         if (vm.flying) {
@@ -454,6 +458,7 @@ fun MainScreen(
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
         ) { DroneInScreen(vm) { showDrones = false } }
     }
+    droneDraft?.let { DroneEntryDialog(vm, it) { droneDraft = null } }
 }
 
 /** Contents of the "☰" drawer: position, screen settings, theme, sync and APK sharing. */

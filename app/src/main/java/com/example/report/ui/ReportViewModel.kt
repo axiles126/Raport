@@ -92,6 +92,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     /** «Заїхав дрон» scans in order (number = position + 1). Local only: not synced, not in shift reports. */
     val droneIns = mutableStateListOf<DroneIn>()
+    var droneModel by mutableStateOf("Matrice 4T")
     val fields = mutableStateListOf<Field>()
     val points = mutableStateListOf<Point>()
     var dayCfg by mutableStateOf(DayCfg())
@@ -200,6 +201,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         needsText = sp.getString("kap_needs", "") ?: ""
         needsNumbered = sp.getBoolean("kap_needs_num", true)
         droneIns.addAll(store.load<List<DroneIn>>("kap_dronein", emptyList()))
+        droneModel = sp.getString("kap_drone_model", "Matrice 4T") ?: "Matrice 4T"
 
         val savedSchedules = store.load<List<ScheduledSend>>("kap_schedules", emptyList())
         schedules.clear()
@@ -776,33 +778,52 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         emit(Op.AddEvent(picked))
     }
 
-    // ==== «Заїхав дрон»: separate local list + its own report ===============================
+    // ==== «Заїхав / Переданий дрон»: separate local lists + own reports =====================
 
-    fun droneArrived(qr: String) {
-        val code = qr.replace(Regex("\\s+"), " ").trim().take(80)
-        val dup = droneIns.indexOfFirst { code.isNotEmpty() && it.code == code }
-        droneIns.add(DroneIn(System.currentTimeMillis(), code))
+    fun dronesOf(kind: String): List<IndexedValue<DroneIn>> =
+        droneIns.withIndex().filter { it.value.kind == kind }
+
+    /** Adds (index = -1) or replaces an entry; returns its 1-based number within its list. */
+    fun saveDrone(index: Int, kind: String, model: String, tail: String, code: String): Int {
+        val m = model.trim().ifEmpty { "Matrice 4T" }
+        val d = DroneIn(
+            t = droneIns.getOrNull(index)?.t ?: System.currentTimeMillis(),
+            code = code.replace(Regex("\\s+"), " ").trim().take(80),
+            model = m,
+            tail = tail.filter { it.isDigit() }.take(4),
+            kind = kind,
+        )
+        if (index in droneIns.indices) droneIns[index] = d else droneIns.add(d)
+        droneModel = m
+        store.putString("kap_drone_model", m)
         saveDroneIns()
-        val n = droneIns.size
-        if (dup >= 0) setStatus("⚠ Заїхав дрон №$n — цей QR уже був під №${dup + 1}", "err")
-        else setStatus("✓ Заїхав дрон №$n" + if (code.isNotEmpty()) ": $code" else "", "ok")
+        val list = dronesOf(kind)
+        val n = list.indexOfFirst { it.value === d } + 1
+        val dup = d.code.isNotEmpty() && list.count { it.value.code == d.code } > 1
+        val what = if (kind == "out") "Переданий дрон" else "Заїхав дрон"
+        setStatus((if (dup) "⚠ $what №$n — цей номер уже є у списку" else "✓ $what №$n"), if (dup) "err" else "ok")
+        return n
     }
 
-    fun removeDroneIn(index: Int) {
+    fun removeDrone(index: Int) {
         if (index !in droneIns.indices) return
         droneIns.removeAt(index); saveDroneIns()
     }
 
-    fun clearDroneIns() { droneIns.clear(); saveDroneIns() }
+    fun clearDrones(kind: String) { droneIns.removeAll { it.kind == kind }; saveDroneIns() }
 
     private fun saveDroneIns() =
         store.putStringNow("kap_dronein", store.json.encodeToString(ListSerializer(DroneIn.serializer()), droneIns.toList()))
 
-    fun droneReportText(): String {
-        if (droneIns.isEmpty()) return ""
-        val head = "Заїхали дрони" + (if (name.isNotBlank()) " · СП \"$name\"" else "") + " · " + TimeFmt.fmtD(droneIns.first().t)
-        val rows = droneIns.mapIndexed { i, d -> "${i + 1}. ${TimeFmt.hm(d.t)}" + if (d.code.isNotEmpty()) " — ${d.code}" else "" }
-        return (listOf(head) + rows + "Всього: ${droneIns.size}").joinToString("\n")
+    fun droneReportText(kind: String): String {
+        val list = dronesOf(kind).map { it.value }
+        if (list.isEmpty()) return ""
+        val one = list.size == 1
+        val title = if (kind == "out") (if (one) "Переданий дрон" else "Передані дрони")
+                    else (if (one) "Заїхав дрон" else "Заїхали дрони")
+        val head = title + (if (name.isNotBlank()) " · СП \"$name\"" else "") + " · " + TimeFmt.fmtD(System.currentTimeMillis())
+        val rows = list.mapIndexed { i, d -> "${i + 1}. ${d.model} (${d.tail.ifEmpty { "    " }}) ${d.code}".trimEnd() }
+        return (listOf(head) + rows + "Всього: ${list.size}").joinToString("\n")
     }
 
     fun updateEvent(index: Int, transform: (Event) -> Event) {
