@@ -71,7 +71,7 @@ fun DroneInScreen(vm: ReportViewModel, close: () -> Unit) {
                 Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("ЗАЇХАЛИ ДРОНИ", Modifier.weight(1f), color = cs.onSurfaceVariant, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("ЗАЇХАЛИ ДРОНИ", Modifier.weight(1f), color = cs.onSurfaceVariant, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                 val has = vm.droneIns.isNotEmpty()
                 IconButton(onClick = { copyText(context, vm.droneReportText()); vm.setStatus("✓ Скопійовано", "ok") }, enabled = has) {
                     Icon(Icons.Filled.ContentCopy, "Копіювати", tint = if (has) cs.onSurface else cs.outline)
@@ -89,7 +89,7 @@ fun DroneInScreen(vm: ReportViewModel, close: () -> Unit) {
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 if (vm.droneIns.isEmpty()) item {
                     Text(
-                        "Ще нічого. «Сканувати» — QR дрона,\nкожне сканування — наступний номер.",
+                        "Ще нічого.\nСканування QR дрона —\nнаступний номер у списку.",
                         Modifier.padding(16.dp), color = cs.outline, fontSize = 14.sp, fontFamily = FontFamily.Monospace,
                     )
                 }
@@ -108,10 +108,10 @@ fun DroneInScreen(vm: ReportViewModel, close: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Всього: ${vm.droneIns.size} · окремо від звітів", Modifier.padding(start = 8.dp), color = cs.onSurfaceVariant, fontSize = 11.sp)
+                Text("Всього: ${vm.droneIns.size}", Modifier.padding(start = 8.dp), color = cs.onSurfaceVariant, fontSize = 13.sp)
                 TextButton(onClick = { scan.launch(droneScanOptions()) }) {
                     Icon(Icons.Filled.QrCodeScanner, null, tint = cs.primary)
-                    Text("  Сканувати", color = cs.primary, fontWeight = FontWeight.Bold)
+                    Text("  СКАНУВАТИ", color = cs.primary, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                 }
             }
         }
