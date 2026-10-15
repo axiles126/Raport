@@ -114,6 +114,7 @@ fun MainScreen(
     var showDrones by remember { mutableStateOf(false) }
     var droneDraft by remember { mutableStateOf<DroneDraft?>(null) }
     var showDroneMenu by remember { mutableStateOf(false) }
+    var confirmCancelFlight by remember { mutableStateOf(false) }
     var droneScanRequest by remember { mutableStateOf<String?>(null) }
     var deleteTemplates by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
@@ -237,6 +238,9 @@ fun MainScreen(
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                 TextButton(onClick = { showLoss = true }) {
                                     Text("Втрата борту", color = ErrRed.copy(alpha = 0.8f), fontSize = 13.sp)
+                                }
+                                TextButton(onClick = { confirmCancelFlight = true }) {
+                                    Text("Не зберігати виліт", color = cs.onSurfaceVariant, fontSize = 13.sp)
                                 }
                             }
                         }
@@ -464,6 +468,17 @@ fun MainScreen(
         ) { DroneInScreen(vm) { showDrones = false } }
     }
     droneDraft?.let { DroneEntryDialog(vm, it) { droneDraft = null } }
+    if (confirmCancelFlight) {
+        AlertDialog(
+            onDismissRequest = { confirmCancelFlight = false },
+            title = { Text("Не зберігати цей виліт?") },
+            text = { Text("Таймер зупиниться, виліт буде видалено і не потрапить у жоден звіт.") },
+            confirmButton = {
+                TextButton(onClick = { vm.cancelActiveFlight(); confirmCancelFlight = false }) { Text("Не зберігати", color = ErrRed) }
+            },
+            dismissButton = { TextButton(onClick = { confirmCancelFlight = false }) { Text("Скасувати") } },
+        )
+    }
     if (showDroneMenu) {
         AlertDialog(
             onDismissRequest = { showDroneMenu = false },

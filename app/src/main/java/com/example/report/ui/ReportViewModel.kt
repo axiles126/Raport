@@ -75,9 +75,43 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         onStatus = { netStatus = it }
         onToast = { text, cls -> setStatus(text, cls) }
         onPeersChanged = { netPeers = it }
+        onConnectFailing = { lookForHub() }
     }
     val nsd = NsdHelper(application)
     val foundHubs = mutableStateListOf<NsdHelper.Found>()
+
+    // ---- network comes back: client reconnects at once, hub re-announces itself ----
+    private val connMgr = application.getSystemService(android.net.ConnectivityManager::class.java)
+    private val netCb = object : android.net.ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: android.net.Network) {
+            viewModelScope.launch(Dispatchers.Main.immediate) { onNetworkBack() }
+        }
+    }
+    init { runCatching { connMgr?.registerDefaultNetworkCallback(netCb) } }
+
+    private fun onNetworkBack() {
+        when (netMode) {
+            NetMode.CLIENT -> sync.reconnectNow()
+            NetMode.HUB -> nsd.register("Report-" + Build.MODEL, HUB_PORT)
+            else -> Unit
+        }
+    }
+
+    /** Client keeps failing (hub IP may have changed after Wi-Fi reconnect): find the hub via NSD and switch. */
+    private fun lookForHub() {
+        if (netMode != NetMode.CLIENT) return
+        val code = store.sp.getString("kap_hubcode", "") ?: ""
+        if (code.isEmpty()) return
+        nsd.startDiscovery { found ->
+            viewModelScope.launch(Dispatchers.Main.immediate) {
+                if (netMode == NetMode.CLIENT && found.ip != sync.connectedHost) {
+                    nsd.stopDiscovery()
+                    setStatus("Хаб знайдено за новою адресою " + found.ip, "ok")
+                    connectToHub(found.ip, code)
+                }
+            }
+        }
+    }
 
     /** Hub: re-broadcast snapshot after a local change. Client: push the op to the hub. */
     private var onBroadcast: (() -> Unit)? = null
@@ -300,6 +334,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        runCatching { connMgr?.unregisterNetworkCallback(netCb) }
         sync.shutdown()
         nsd.stop()
         FlightBridge.toggle = null
@@ -533,6 +568,14 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         saveFlights()
         afterData()
         emit(Op.DeleteFlight(t))
+    }
+
+    /** «Не зберігати виліт»: the takeoff was pressed by mistake / too early — drop the active flight entirely. */
+    fun cancelActiveFlight() {
+        val f = flights.firstOrNull { it.lt == null } ?: return
+        deleteFlight(f.t)
+        FlightBridge.onStateChanged?.invoke()
+        setStatus("Виліт скасовано — у звіти не потрапить", "ok")
     }
 
     fun updateFlight(t: Long, transform: (Flight) -> Flight) {

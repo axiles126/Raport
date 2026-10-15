@@ -96,6 +96,9 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
     }
 
     private suspend fun DefaultWebSocketServerSession.handleHubSession() {
+        // Liveness: ping every 5 s, drop a client that does not answer within 12 s (Wi-Fi gone).
+        pingIntervalMillis = PING_MS
+        timeoutMillis = PING_TIMEOUT_MS
         // 1. client nonce (or legacy JSON from an old client)
         val first = withTimeoutOrNull(HANDSHAKE_TIMEOUT_MS) { receiveText() }
         if (first != null && first.startsWith("{")) {
@@ -173,28 +176,54 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
     //  propagated the constant `Build.MODEL` argument into Msg.Hello's constructor, so the
     //  `deviceName` parameter is reconstructed (call site passes Build.MODEL, ip trimmed,
     //  code already normCode'd).
+    /** Wakes the reconnect loop immediately (network came back). */
+    private val kick = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+    /** Called on main after every few failed attempts in a row — VM looks the hub up via NSD. */
+    var onConnectFailing: ((Int) -> Unit)? = null
+
+    @Volatile var connectedHost: String = ""
+        private set
+
     fun connect(host: String, code: String, deviceName: String = Build.MODEL) {
         stopClient()
         clientWantConnect = true
+        connectedHost = host
         val c = HttpClient(ClientCIO) { install(ClientWebSockets) }
         client = c
         clientJob = scope.launch {
             var firstTry = true
+            var fails = 0
             while (clientWantConnect) {
+                var ok = false
                 try {
                     c.webSocket(method = HttpMethod.Get, host = host, port = PORT, path = "/sync") {
-                        runClientSession(host, code, deviceName) { firstTry = true }
+                        pingIntervalMillis = PING_MS
+                        timeoutMillis = PING_TIMEOUT_MS
+                        runClientSession(host, code, deviceName) { firstTry = true; ok = true; fails = 0 }
                     }
                 } catch (e: Exception) {
-                    if (firstTry) onMain { onStatus?.invoke("Перепідключення до хаба…") }
-                    firstTry = false
+                    // connection refused / timed out / dropped
                 } finally {
                     clientSession = null
                 }
                 if (!clientWantConnect) break
-                delay(RECONNECT_DELAY_MS)
+                if (!ok) {
+                    fails++
+                    if (fails % 3 == 0) onMain { onConnectFailing?.invoke(fails) }
+                }
+                if (firstTry) onMain { onStatus?.invoke("Перепідключення до хаба…") }
+                firstTry = false
+                withTimeoutOrNull(RECONNECT_DELAY_MS) { kick.receive() }
             }
         }
+    }
+
+    /** Network is back: drop a possibly stale session and retry right now. */
+    fun reconnectNow() {
+        if (!clientWantConnect) return
+        clientSession?.let { p -> scope.launch { runCatching { p.session.close(CloseReason(CloseReason.Codes.GOING_AWAY, "net change")) } } }
+        kick.trySend(Unit)
     }
 
     /**
@@ -216,10 +245,11 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         val reply = withTimeoutOrNull(HANDSHAKE_TIMEOUT_MS) { receiveText() }
         val nonceH = SecureChannel.parseNonce(reply)
         if (nonceH == null) {
-            val why = if (reply != null && reply.startsWith("{")) "на хабі стара версія Report" else "немає звʼязку"
-            onMain { onStatus?.invoke("Відмова: $why") }
-            clientWantConnect = false
-            return
+            if (reply != null && reply.startsWith("{")) {
+                onMain { onStatus?.invoke("Відмова: на хабі стара версія Report") }
+                clientWantConnect = false
+            }
+            return // no answer: transient, the loop retries
         }
 
         // 3. Hello
@@ -232,11 +262,12 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         val welcome = ans?.let { peer.chan.open(it) }
             ?.let { runCatching { Proto.decode(it) }.getOrNull() } as? Msg.Welcome
         if (welcome == null || !welcome.accepted) {
-            val reason = welcome?.reason
-                ?: if (ans != null && ans.startsWith("X2:")) ans.removePrefix("X2:") else "немає звʼязку"
-            onMain { onStatus?.invoke("Відмова: $reason") }
-            clientWantConnect = false
-            return
+            val reason = welcome?.reason ?: if (ans != null && ans.startsWith("X2:")) ans.removePrefix("X2:") else null
+            if (reason != null) { // real refusal (bad code / old version) — stop
+                onMain { onStatus?.invoke("Відмова: $reason") }
+                clientWantConnect = false
+            }
+            return // no answer: transient, the loop retries
         }
         onMain { onStatus?.invoke("Підключено до $host") }
 
@@ -294,5 +325,7 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         const val PORT = 8777
         private const val HANDSHAKE_TIMEOUT_MS = 10_000L
         private const val RECONNECT_DELAY_MS = 3_000L
+        private const val PING_MS = 5_000L
+        private const val PING_TIMEOUT_MS = 12_000L
     }
 }
