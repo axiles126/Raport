@@ -11,14 +11,19 @@ jobs:
         with: { distribution: temurin, java-version: '21' }
       - uses: android-actions/setup-android@v3
       - name: SDK 37
-        run: yes | sdkmanager --licenses >/dev/null; sdkmanager "platforms;android-37" "build-tools;37.0.0" || sdkmanager --list | grep -E "platforms;android-3[6-9]|build-tools;3[6-9]" | head
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-37" || sdkmanager --list | grep -E 'platforms;android-3[6-9]|build-tools;3[6-9]' | head -20
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: current }
       - name: assembleDebug
-        run: gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+        run: |
+          set -o pipefail
+          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
       - name: errors
         if: failure()
-        run: grep -E "^e: |error:|What went wrong" -A3 build.log | head -300
+        run: |
+          grep -E '^e: |error:|What went wrong' -A3 build.log | head -300
       - uses: actions/upload-artifact@v4
         if: success()
         with: { name: Report-debug, path: app/build/outputs/apk/debug/*.apk }
