@@ -1,7 +1,5 @@
 package com.example.report.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -25,7 +23,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Share
@@ -184,9 +181,6 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
                     Icon(Icons.Filled.Share, null, tint = if (has) OkGreen else cs.outline)
                     Text(" ПОДІЛИТИСЯ", color = if (has) OkGreen else cs.outline, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                 }
-                IconButton(onClick = { copyText(context, text); vm.setStatus("✓ Скопійовано", "ok") }, enabled = has) {
-                    Icon(Icons.Filled.ContentCopy, "Копіювати", tint = if (has) cs.onSurface else cs.outline)
-                }
                 IconButton(onClick = { confirmClear = true }, enabled = has) {
                     Icon(Icons.Filled.DeleteSweep, "Очистити", tint = if (has) ErrRed else cs.outline)
                 }
@@ -217,11 +211,6 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
         title = { Text("Видалити запис?") },
         text = { Text("Наступні номери зсунуться.") },
     )
-}
-
-private fun copyText(context: Context, text: String) {
-    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Дрони", text))
 }
 
 private fun shareText(context: Context, text: String) {
