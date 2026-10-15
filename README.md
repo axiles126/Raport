@@ -25,3 +25,10 @@ _merged-into-libs/ — бібліотечні класи, куди R8 злив �
 ws://<hub>:8777/sync, NSD `_kapibara._tcp.`. N2:nonceC → N2:nonceH → E2:Hello(code) → Welcome + Snapshot.
 base = SHA-256("REPORTSYNC2|"+code); key c2h/h2c = HMAC-SHA256(base, dir‖nC‖nH); AES-256-GCM,
 кадр E2:base64(ctr8‖ct‖tag), IV = 0000‖ctr, лічильник строго зростає.
+
+## Збірка й перевірка (CI)
+`.github/workflows/build.yml` на кожен push у `decomp`: `assembleDebug` + `assembleRelease` (R8, `-dontobfuscate`, як в оригіналі),
+потім емулятор API 35 проганяє однаковий сценарій на оригінальному APK (гілка `orig-apk`) і на відновленому
+(головний екран → взліт → посадка → «Доба» → налаштування → меню). Результат (APK, лог, скріншоти, crash-логи) — у гілці `ci-log`.
+Перший прогін: 0 помилок компіляції, 0 падінь, UI-дерева й скріншоти збігаються (відрізняються лише часові мітки).
+Release підписаний debug-ключем — поверх оригіналу (ключ CN=Report) не встановиться, потрібне видалення старого.
