@@ -34,6 +34,8 @@ run() {
     tap "Налаштування"; sleep 2; shot 5_settings; adb shell input keyevent 4; sleep 1
     tap "Меню"; sleep 2; shot 6_menu; adb shell input keyevent 4; sleep 1
     tap "Інструкція"; sleep 2; shot 7_guide; adb shell input keyevent 4; sleep 1
+    adb shell am start -n $PKG/com.example.report.MainActivity >/dev/null; sleep 2
+    tap "ЗАЇХАВ ДРОН"; sleep 4; shot 8_dronescan; adb shell input keyevent 4; sleep 2; shot 9_after_scan
   } > smoke/${TAG}_steps.txt 2>&1
   PID=$(adb shell pidof $PKG | tr -d '\r')
   adb logcat -d -b crash > smoke/${TAG}_crash.txt

@@ -42,6 +42,8 @@ import java.util.Collections
 import kotlin.random.Random
 import kotlin.random.nextInt
 
+private const val DRONE_IN = "Заїхав дрон"
+
 class ReportViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Loss-of-aircraft report being composed on the loss screen. */
@@ -769,6 +771,22 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         saveEvents()
         afterData()
         emit(Op.AddEvent(picked))
+    }
+
+    /**
+     * «Заїхав дрон»: shift event "Заїхав дрон №N: <QR>", N = ordinal of such events in the current shift.
+     * Synced as AddEvent + UpdateEvent, so peers on older builds see the same line.
+     */
+    fun droneArrived(qr: String) {
+        val code = qr.replace(Regex("\\s+"), " ").trim().take(80)
+        val now = System.currentTimeMillis()
+        val (from, to) = ReportBuilder.shiftBounds(now, shiftStart)
+        val n = events.count { it.t in from until to && it.text.startsWith(DRONE_IN) } + 1
+        val text = "$DRONE_IN №$n" + if (code.isNotEmpty()) ": $code" else ""
+        addEvent("")
+        val i = events.lastIndex
+        updateEvent(i) { it.copy(t = if (now in from until to) now else from, text = text, mgrs = "") }
+        setStatus("✓ $text", "ok")
     }
 
     fun updateEvent(index: Int, transform: (Event) -> Event) {

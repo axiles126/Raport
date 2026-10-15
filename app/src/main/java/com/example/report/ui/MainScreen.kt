@@ -37,6 +37,10 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.activity.compose.rememberLauncherForActivityResult
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ColorScheme
@@ -203,6 +207,25 @@ fun MainScreen(
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.sp,
                                 )
+                            }
+                        }
+                        // ---- «Заїхав дрон»: QR scan -> numbered shift event ----
+                        val droneScan = rememberLauncherForActivityResult(ScanContract()) { r ->
+                            r.contents?.let { vm.droneArrived(it) }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            TextButton(onClick = {
+                                droneScan.launch(
+                                    ScanOptions()
+                                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                        .setPrompt("Скануйте QR дрона")
+                                        .setBeepEnabled(true)
+                                        .setOrientationLocked(false),
+                                )
+                            }) {
+                                Icon(Icons.Filled.QrCodeScanner, null, tint = cs.primary)
+                                Spacer(Modifier.width(6.dp))
+                                Text("ЗАЇХАВ ДРОН", color = cs.primary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         if (vm.flying) {
