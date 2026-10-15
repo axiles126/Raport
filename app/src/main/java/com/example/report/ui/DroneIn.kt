@@ -202,7 +202,7 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
     )
     if (removeAt >= 0) AlertDialog(
         onDismissRequest = { removeAt = -1 },
-        confirmButton = { TextButton(onClick = { vm.removeDrone(removeAt); removeAt = -1 }) { Text("Видалити", color = ErrRed) } },
+        confirmButton = { TextButton(onClick = { vm.removeDroneEntry(removeAt); removeAt = -1 }) { Text("Видалити", color = ErrRed) } },
         dismissButton = { TextButton(onClick = { removeAt = -1 }) { Text("Скасувати") } },
         title = { Text("Видалити запис?") },
         text = { Text("Наступні номери зсунуться.") },

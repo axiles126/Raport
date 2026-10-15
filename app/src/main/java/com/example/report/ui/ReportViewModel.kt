@@ -805,7 +805,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         return n
     }
 
-    fun removeDrone(index: Int) {
+    fun removeDroneEntry(index: Int) {
         if (index !in droneIns.indices) return
         droneIns.removeAt(index); saveDroneIns()
     }
