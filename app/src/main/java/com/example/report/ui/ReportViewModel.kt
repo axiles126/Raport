@@ -17,6 +17,7 @@ import com.example.report.core.ReportInput
 import com.example.report.core.TimeFmt
 import com.example.report.data.DailyAlarm
 import com.example.report.data.DayCfg
+import com.example.report.data.DroneIn
 import com.example.report.data.Event
 import com.example.report.data.Field
 import com.example.report.data.Flight
@@ -41,8 +42,6 @@ import java.net.NetworkInterface
 import java.util.Collections
 import kotlin.random.Random
 import kotlin.random.nextInt
-
-private const val DRONE_IN = "Заїхав дрон"
 
 class ReportViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -90,6 +89,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     val flights = mutableStateListOf<Flight>()
     val templates = mutableStateListOf<String>()
     val events = mutableStateListOf<Event>()
+
+    /** «Заїхав дрон» scans in order (number = position + 1). Local only: not synced, not in shift reports. */
+    val droneIns = mutableStateListOf<DroneIn>()
     val fields = mutableStateListOf<Field>()
     val points = mutableStateListOf<Point>()
     var dayCfg by mutableStateOf(DayCfg())
@@ -197,6 +199,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         autoSignal = sp.getBoolean("kap_signal", false)
         needsText = sp.getString("kap_needs", "") ?: ""
         needsNumbered = sp.getBoolean("kap_needs_num", true)
+        droneIns.addAll(store.load<List<DroneIn>>("kap_dronein", emptyList()))
 
         val savedSchedules = store.load<List<ScheduledSend>>("kap_schedules", emptyList())
         schedules.clear()
@@ -773,20 +776,33 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         emit(Op.AddEvent(picked))
     }
 
-    /**
-     * «Заїхав дрон»: shift event "Заїхав дрон №N: <QR>", N = ordinal of such events in the current shift.
-     * Synced as AddEvent + UpdateEvent, so peers on older builds see the same line.
-     */
+    // ==== «Заїхав дрон»: separate local list + its own report ===============================
+
     fun droneArrived(qr: String) {
         val code = qr.replace(Regex("\\s+"), " ").trim().take(80)
-        val now = System.currentTimeMillis()
-        val (from, to) = ReportBuilder.shiftBounds(now, shiftStart)
-        val n = events.count { it.t in from until to && it.text.startsWith(DRONE_IN) } + 1
-        val text = "$DRONE_IN №$n" + if (code.isNotEmpty()) ": $code" else ""
-        addEvent("")
-        val i = events.lastIndex
-        updateEvent(i) { it.copy(t = if (now in from until to) now else from, text = text, mgrs = "") }
-        setStatus("✓ $text", "ok")
+        val dup = droneIns.indexOfFirst { code.isNotEmpty() && it.code == code }
+        droneIns.add(DroneIn(System.currentTimeMillis(), code))
+        saveDroneIns()
+        val n = droneIns.size
+        if (dup >= 0) setStatus("⚠ Заїхав дрон №$n — цей QR уже був під №${dup + 1}", "err")
+        else setStatus("✓ Заїхав дрон №$n" + if (code.isNotEmpty()) ": $code" else "", "ok")
+    }
+
+    fun removeDroneIn(index: Int) {
+        if (index !in droneIns.indices) return
+        droneIns.removeAt(index); saveDroneIns()
+    }
+
+    fun clearDroneIns() { droneIns.clear(); saveDroneIns() }
+
+    private fun saveDroneIns() =
+        store.putStringNow("kap_dronein", store.json.encodeToString(ListSerializer(DroneIn.serializer()), droneIns.toList()))
+
+    fun droneReportText(): String {
+        if (droneIns.isEmpty()) return ""
+        val head = "Заїхали дрони" + (if (name.isNotBlank()) " · СП \"$name\"" else "") + " · " + TimeFmt.fmtD(droneIns.first().t)
+        val rows = droneIns.mapIndexed { i, d -> "${i + 1}. ${TimeFmt.hm(d.t)}" + if (d.code.isNotEmpty()) " — ${d.code}" else "" }
+        return (listOf(head) + rows + "Всього: ${droneIns.size}").joinToString("\n")
     }
 
     fun updateEvent(index: Int, transform: (Event) -> Event) {

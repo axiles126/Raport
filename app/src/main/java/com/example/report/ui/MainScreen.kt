@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ColorScheme
@@ -110,6 +109,7 @@ fun MainScreen(
     onShareApk: () -> Unit,
 ) {
     var showTemplates by remember { mutableStateOf(false) }
+    var showDrones by remember { mutableStateOf(false) }
     var deleteTemplates by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
     var showGuide by remember { mutableStateOf(false) }
@@ -209,23 +209,22 @@ fun MainScreen(
                                 )
                             }
                         }
-                        // ---- «Заїхав дрон»: QR scan -> numbered shift event ----
+                        // ---- «Заїхав дрон»: QR scan -> separate list/report (not in shift reports) ----
                         val droneScan = rememberLauncherForActivityResult(ScanContract()) { r ->
                             r.contents?.let { vm.droneArrived(it) }
                         }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            TextButton(onClick = {
-                                droneScan.launch(
-                                    ScanOptions()
-                                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                                        .setPrompt("Скануйте QR дрона")
-                                        .setBeepEnabled(true)
-                                        .setOrientationLocked(false),
-                                )
-                            }) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(onClick = { droneScan.launch(droneScanOptions()) }) {
                                 Icon(Icons.Filled.QrCodeScanner, null, tint = cs.primary)
                                 Spacer(Modifier.width(6.dp))
                                 Text("ЗАЇХАВ ДРОН", color = cs.primary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            }
+                            TextButton(onClick = { showDrones = true }) {
+                                Text("список · ${vm.droneIns.size}", color = cs.onSurfaceVariant, fontSize = 13.sp)
                             }
                         }
                         if (vm.flying) {
@@ -448,6 +447,12 @@ fun MainScreen(
 
     if (showNetwork) {
         NetworkDialog(vm) { showNetwork = false }
+    }
+    if (showDrones) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showDrones = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        ) { DroneInScreen(vm) { showDrones = false } }
     }
 }
 
