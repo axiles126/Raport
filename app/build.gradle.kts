@@ -19,13 +19,26 @@ android {
         versionName = "2.6"
     }
 
+    signingConfigs {
+        // Release key comes from CI secrets (RELEASE_KEYSTORE_B64 etc.) or local env; falls back to debug key.
+        val ks = System.getenv("RELEASE_KEYSTORE")
+        if (ks != null && file(ks).exists()) {
+            create("release") {
+                storeFile = file(ks)
+                storePassword = System.getenv("RELEASE_STORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: System.getenv("RELEASE_STORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Test signing only: the original APK was signed with the author's own key (CN=Report, C=UA).
-            signingConfig = signingConfigs.getByName("debug")
+            // Original APK is signed with the author's key (CN=Report, O=Report, C=UA).
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

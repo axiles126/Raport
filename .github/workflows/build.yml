@@ -21,8 +21,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: current }
       - name: assembleDebug
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          KS_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
         run: |
           set -o pipefail
+          if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > $RUNNER_TEMP/release.jks; export RELEASE_KEYSTORE=$RUNNER_TEMP/release.jks; echo "signing: release key"; else echo "signing: debug key (no secrets)"; fi
           gradle :app:assembleDebug :app:assembleRelease --no-daemon 2>&1 | tee build.log
       - name: errors
         if: failure()
@@ -57,5 +63,6 @@ jobs:
           cp $GITHUB_WORKSPACE/app/build/outputs/apk/debug/*.apk $GITHUB_WORKSPACE/app/build/outputs/apk/release/*.apk . 2>/dev/null || true
           mkdir -p smoke && cp $GITHUB_WORKSPACE/smoke/* smoke/ 2>/dev/null || true
           echo "${{ github.sha }} ${{ job.status }}" > STATUS
+          for a in *.apk; do $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner verify --print-certs "$a" 2>/dev/null | grep -m2 -E "DN|SHA-256" | sed "s#^#$a: #" >> STATUS; done
           git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "ci ${{ github.sha }}"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-log
