@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -265,7 +266,8 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             Modifier
                 .align(Alignment.TopEnd)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(8.dp),
+                .padding(8.dp)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
         ) {
             MapIconBtn(Icons.Filled.Close, "Закрити", onClick = { close() })
             MapIconBtn(Icons.Filled.MyLocation, "Моє місце", onClick = {
@@ -283,11 +285,6 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             MapIconBtn(Icons.Filled.Explore, "Компас", compassOn, onClick = { compassOn = !compassOn })
             MapIconBtn(Icons.Filled.Timeline, "Маршрут точками", drawMode == 1, onClick = { drawMode = if (drawMode == 1) 0 else 1 })
             MapIconBtn(Icons.Filled.Gesture, "Маршрут від руки", drawMode == 2, onClick = { drawMode = if (drawMode == 2) 0 else 2 })
-            if (vm.route.isNotEmpty()) {
-                MapIconBtn(Icons.AutoMirrored.Filled.Undo, "Крок назад", onClick = { vm.routeUndo(); rev++ })
-                MapIconBtn(Icons.Filled.Save, "Зберегти маршрут", onClick = { showSave = true })
-                MapIconBtn(Icons.Filled.LinearScale, "Очистити маршрут", onClick = { vm.routeClear(); rev++ })
-            }
             MapIconBtn(Icons.Filled.Map, "Маршрути", onClick = { showRoutes = true })
             MapIconBtn(Icons.Filled.DeleteSweep, "Очистити точки", onClick = {
                 if (vm.points.isNotEmpty()) {
@@ -295,6 +292,19 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                     rev++
                 }
             })
+        }
+
+        if (vm.route.isNotEmpty()) {
+            Row(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(start = 8.dp, bottom = 24.dp),
+            ) {
+                MapIconBtn(Icons.AutoMirrored.Filled.Undo, "Крок назад", onClick = { vm.routeUndo(); rev++ })
+                MapIconBtn(Icons.Filled.Save, "Зберегти маршрут", onClick = { showSave = true })
+                MapIconBtn(Icons.Filled.LinearScale, "Очистити маршрут", onClick = { vm.routeClear(); rev++ })
+            }
         }
 
         Column(
