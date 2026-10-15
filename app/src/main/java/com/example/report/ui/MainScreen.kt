@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -107,6 +108,7 @@ fun MainScreen(
     onOpenPad: () -> Unit,
     onOpenSettings: () -> Unit,
     onShareApk: () -> Unit,
+    onOpenStrike: () -> Unit = {},
 ) {
     var showTemplates by remember { mutableStateOf(false) }
     var showDrones by remember { mutableStateOf(false) }
@@ -348,6 +350,9 @@ fun MainScreen(
                             }
                             IconButton(onClick = onOpenNeeds) {
                                 Icon(Icons.Filled.Checklist, "Потреби", tint = cs.onSurface)
+                            }
+                            IconButton(onClick = onOpenStrike) {
+                                Icon(Icons.Filled.GpsFixed, "Ураження", tint = ErrRed)
                             }
                         }
 

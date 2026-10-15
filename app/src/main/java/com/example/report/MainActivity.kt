@@ -50,6 +50,7 @@ import com.example.report.overlay.FlightBridge
 import com.example.report.overlay.OverlayService
 import com.example.report.ui.LossScreen
 import com.example.report.ui.MainScreen
+import com.example.report.ui.StrikeScreen
 import com.example.report.ui.MapScreen
 import com.example.report.ui.NeedsScreen
 import com.example.report.ui.ReportPad
@@ -121,6 +122,7 @@ fun App(vm: ReportViewModel) {
     var showNeeds by remember { mutableStateOf(false) }
     var showPad by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showStrike by remember { mutableStateOf(false) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     LaunchedEffect(Unit) {
@@ -202,7 +204,11 @@ fun App(vm: ReportViewModel) {
             { showPad = true },
             { showSettings = true },
             { shareApk(context, vm) },
+            onOpenStrike = { showStrike = true },
         )
+        if (showStrike) {
+            StrikeScreen(vm, { showMap = true }) { showStrike = false }
+        }
         if (showNeeds) {
             NeedsScreen(vm, { shareNeeds(context, vm) }, { showNeeds = false })
         }

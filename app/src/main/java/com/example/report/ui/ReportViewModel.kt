@@ -18,6 +18,7 @@ import com.example.report.core.TimeFmt
 import com.example.report.data.DailyAlarm
 import com.example.report.data.DayCfg
 import com.example.report.data.DroneIn
+import com.example.report.data.StrikeDraft
 import com.example.report.data.Event
 import com.example.report.data.Field
 import com.example.report.data.Flight
@@ -93,6 +94,13 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     /** «Заїхав дрон» scans in order (number = position + 1). Local only: not synced, not in shift reports. */
     val droneIns = mutableStateListOf<DroneIn>()
     var droneModel by mutableStateOf("Matrice 4T")
+
+    /** «Ураження» report draft + map coordinate target for it. */
+    var strike by mutableStateOf(StrikeDraft())
+    var strikeCoordTarget by mutableStateOf(false)
+
+    /** Route drawn on the map (lat, lng), kept while the app runs. */
+    val route = mutableStateListOf<Pair<Double, Double>>()
     val fields = mutableStateListOf<Field>()
     val points = mutableStateListOf<Point>()
     var dayCfg by mutableStateOf(DayCfg())
@@ -208,6 +216,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         needsNumbered = sp.getBoolean("kap_needs_num", true)
         droneIns.addAll(store.load<List<DroneIn>>("kap_dronein", emptyList()))
         droneModel = sp.getString("kap_drone_model", "Matrice 4T") ?: "Matrice 4T"
+        strike = store.load<StrikeDraft>("kap_strike", StrikeDraft())
 
         val savedSchedules = store.load<List<ScheduledSend>>("kap_schedules", emptyList())
         schedules.clear()
@@ -782,6 +791,38 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         saveEvents()
         afterData()
         emit(Op.AddEvent(picked))
+    }
+
+    // ==== «Ураження»: separate report ======================================================
+
+    fun updateStrike(transform: (StrikeDraft) -> StrikeDraft) {
+        strike = transform(strike)
+        store.putString("kap_strike", store.json.encodeToString(StrikeDraft.serializer(), strike))
+    }
+
+    /** New strike: time = now, coords/БК/стрім cleared; crew, position, target, pilot kept. */
+    fun newStrike() = updateStrike {
+        it.copy(t = System.currentTimeMillis(), coords = "", bk = "", stream = "", result = "Ціль уражено.")
+    }
+
+    fun strikeText(): String {
+        val s = strike
+        val t = if (s.t > 0) s.t else System.currentTimeMillis()
+        val crew = s.crew.ifBlank { name }.trim().uppercase()
+        val pos = s.pos.ifBlank { name }.trim().uppercase()
+        val bk = s.bk.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        val out = ArrayList<String>()
+        out += TimeFmt.fmtD4(t) + ".  " + TimeFmt.hm(t)
+        out += "Екіпаж - $crew"
+        out += "Позиція - $pos"
+        out += "Ціль : -  " + s.target.trim()
+        if (s.coords.isNotBlank()) out += s.coords.trim()
+        out += "БК - "
+        if (bk.isEmpty()) out += "1. " else bk.forEachIndexed { i, b -> out += "${i + 1}. $b" }
+        out += "Стрім - " + s.stream.trim()
+        out += "Пілот - " + s.pilot.ifBlank { leader }.trim()
+        out += s.result.trim()
+        return out.joinToString("\n")
     }
 
     // ==== «Заїхав / Переданий дрон»: separate local lists + own reports =====================

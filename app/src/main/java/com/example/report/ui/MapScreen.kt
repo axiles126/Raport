@@ -78,6 +78,10 @@ import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.views.overlay.Polyline
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.LinearScale
+import androidx.compose.material.icons.automirrored.filled.Undo
 import org.osmdroid.views.overlay.Marker
 import kotlin.math.ceil
 import kotlin.math.max
@@ -115,6 +119,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
     var rev by remember { mutableIntStateOf(0) }
     var myLoc by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var compassOn by remember { mutableStateOf(false) }
+    var routeMode by remember { mutableStateOf(false) }
     val heading = rememberHeading(compassOn)
 
     val mapView = remember {
@@ -145,10 +150,16 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             update = { map ->
                 map.overlays.clear()
                 map.overlays.add(MapEventsOverlay(object : MapEventsReceiver {
-                    override fun singleTapConfirmedHelper(p: GeoPoint): Boolean = false
+                    override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                        if (!routeMode) return false
+                        vm.route.add(p.latitude to p.longitude)
+                        rev++
+                        return true
+                    }
 
                     override fun longPressHelper(p: GeoPoint): Boolean {
                         label = vm.addPoint(p.latitude, p.longitude).mgrs
+                        if (vm.strikeCoordTarget) picked = label
                         rev++
                         (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
                             ?.vibrate(VibrationEffect.createOneShot(40L, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -156,6 +167,25 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                     }
                 }))
                 rev // read so that point edits redraw the markers
+                if (vm.route.isNotEmpty()) {
+                    val line = Polyline(map)
+                    line.setPoints(vm.route.map { (la, lo) -> GeoPoint(la, lo) })
+                    line.outlinePaint.color = AColor.parseColor("#f1c40f")
+                    line.outlinePaint.strokeWidth = 8f
+                    line.setOnClickListener { _, _, _ -> false }
+                    map.overlays.add(line)
+                    for ((la, lo) in vm.route) {
+                        val v = Marker(map)
+                        v.position = GeoPoint(la, lo)
+                        v.setAnchor(0.5f, 0.5f)
+                        v.icon = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL; setColor(AColor.parseColor("#f1c40f")); setStroke(3, AColor.BLACK); setSize(22, 22)
+                        }
+                        v.setInfoWindow(null)
+                        v.setOnMarkerClickListener { _, _ -> false }
+                        map.overlays.add(v)
+                    }
+                }
                 for (pt in vm.points) {
                     val m = Marker(map)
                     m.position = GeoPoint(pt.lat, pt.lng)
@@ -193,6 +223,12 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                 .padding(12.dp),
         ) {
             if (label.isNotEmpty()) MapLabel(label)
+            rev
+            if (routeMode || vm.route.size > 1) {
+                MapLabel("Маршрут: " + fmtDist(routeLength(vm.route)) + " · точок " + vm.route.size +
+                    if (routeMode && vm.route.isEmpty()) " · тапайте по карті" else "")
+            }
+            if (vm.strikeCoordTarget) MapLabel("Ураження: довге натискання — координати цілі")
             if (compassOn && heading != null) MapLabel("курс " + heading.toInt() + "°")
         }
 
@@ -216,6 +252,13 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                 }
             })
             MapIconBtn(Icons.Filled.Explore, "Компас", compassOn, onClick = { compassOn = !compassOn })
+            MapIconBtn(Icons.Filled.Timeline, "Маршрут", routeMode, onClick = { routeMode = !routeMode })
+            if (routeMode || vm.route.isNotEmpty()) {
+                MapIconBtn(Icons.AutoMirrored.Filled.Undo, "Крок назад", onClick = {
+                    if (vm.route.isNotEmpty()) { vm.route.removeAt(vm.route.lastIndex); rev++ }
+                })
+                MapIconBtn(Icons.Filled.LinearScale, "Очистити маршрут", onClick = { vm.route.clear(); rev++ })
+            }
             MapIconBtn(Icons.Filled.DeleteSweep, "Очистити точки", onClick = {
                 if (vm.points.isNotEmpty()) {
                     vm.clearPoints()
@@ -262,7 +305,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
     }
 
     DisposableEffect(Unit) {
-        onDispose { vm.eventCoordTarget = null }
+        onDispose { vm.eventCoordTarget = null; vm.strikeCoordTarget = false }
     }
 
     picked?.let { mgrs ->
@@ -318,6 +361,13 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             hasFlight = rec != null,
             onDismiss = { picked = null },
             onLoss = onLoss,
+            onStrike = if (vm.strikeCoordTarget) ({
+                vm.updateStrike { it.copy(coords = mgrs.trim()) }
+                vm.strikeCoordTarget = false
+                vm.setStatus("✓ Координати в ураження", "ok")
+                picked = null
+                close()
+            }) else null,
         )
     }
 }
@@ -479,6 +529,7 @@ private fun CoordPicker(
     hasFlight: Boolean,
     onDismiss: () -> Unit,
     onLoss: (() -> Unit)?,
+    onStrike: (() -> Unit)? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -495,6 +546,11 @@ private fun CoordPicker(
             Column {
                 Text(mgrs, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 Spacer(Modifier.size(8.dp))
+                if (onStrike != null) {
+                    TextButton(onClick = onStrike, modifier = Modifier.fillMaxWidth()) {
+                        Text("В ураження (ціль)", color = ErrRed, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                }
                 if (eventLabel != null) {
                     TextButton(onClick = onEvent, modifier = Modifier.fillMaxWidth()) {
                         Text("У подію: $eventLabel", color = OkGreen, maxLines = 1)
@@ -519,3 +575,19 @@ private fun CoordPicker(
         },
     )
 }
+
+/** Route length in metres (haversine over consecutive points). */
+fun routeLength(pts: List<Pair<Double, Double>>): Double {
+    var d = 0.0
+    for (i in 1 until pts.size) {
+        val (la1, lo1) = pts[i - 1]; val (la2, lo2) = pts[i]
+        val r = 6_371_000.0
+        val p1 = Math.toRadians(la1); val p2 = Math.toRadians(la2)
+        val dp = p2 - p1; val dl = Math.toRadians(lo2 - lo1)
+        val a = Math.sin(dp / 2).let { it * it } + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2).let { it * it }
+        d += 2 * r * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    }
+    return d
+}
+
+fun fmtDist(m: Double): String = if (m < 1000) "${m.toInt()} м" else String.format(java.util.Locale.US, "%.2f км", m / 1000)
