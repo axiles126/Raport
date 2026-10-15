@@ -76,6 +76,7 @@ fun DroneEntryDialog(vm: ReportViewModel, draft: DroneDraft, onDone: () -> Unit)
     var model by remember(draft) { mutableStateOf(draft.model) }
     var tail by remember(draft) { mutableStateOf(draft.tail) }
     var code by remember(draft) { mutableStateOf(draft.code) }
+    val context = LocalContext.current
     val rescan = rememberLauncherForActivityResult(ScanContract()) { r -> r.contents?.let { code = it.trim() } }
     AlertDialog(
         onDismissRequest = onDone,
@@ -106,11 +107,19 @@ fun DroneEntryDialog(vm: ReportViewModel, draft: DroneDraft, onDone: () -> Unit)
             }
         },
         confirmButton = {
-            TextButton(onClick = { vm.saveDrone(draft.index, draft.kind, model, tail, code); onDone() }) {
-                Text("Зберегти", color = OkGreen)
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = {
+                    vm.saveDrone(draft.index, draft.kind, model, tail, code)
+                    shareText(context, vm.droneReportText(draft.kind)); onDone()
+                }) { Text("Зберегти й поділитися", color = OkGreen, fontWeight = FontWeight.Bold) }
+                Row {
+                    TextButton(onClick = onDone) { Text("Скасувати") }
+                    TextButton(onClick = { vm.saveDrone(draft.index, draft.kind, model, tail, code); onDone() }) {
+                        Text("Зберегти", color = OkGreen)
+                    }
+                }
             }
         },
-        dismissButton = { TextButton(onClick = onDone) { Text("Скасувати") } },
     )
 }
 
@@ -171,11 +180,12 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
             HorizontalDivider(color = cs.outline)
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 val has = list.isNotEmpty()
+                TextButton(onClick = { shareText(context, text) }, enabled = has) {
+                    Icon(Icons.Filled.Share, null, tint = if (has) OkGreen else cs.outline)
+                    Text(" ПОДІЛИТИСЯ", color = if (has) OkGreen else cs.outline, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                }
                 IconButton(onClick = { copyText(context, text); vm.setStatus("✓ Скопійовано", "ok") }, enabled = has) {
                     Icon(Icons.Filled.ContentCopy, "Копіювати", tint = if (has) cs.onSurface else cs.outline)
-                }
-                IconButton(onClick = { shareText(context, text) }, enabled = has) {
-                    Icon(Icons.Filled.Share, "Поділитися", tint = if (has) cs.onSurface else cs.outline)
                 }
                 IconButton(onClick = { confirmClear = true }, enabled = has) {
                     Icon(Icons.Filled.DeleteSweep, "Очистити", tint = if (has) ErrRed else cs.outline)
