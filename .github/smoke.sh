@@ -9,10 +9,10 @@ tap() { # tap element by text or content-desc
   adb shell cat /sdcard/ui.xml > /tmp/ui.xml
   b=$(python3 - "$1" <<'PY'
 import sys,re,xml.etree.ElementTree as E
-t=sys.argv[1]
-for n in E.parse('/tmp/ui.xml').iter('node'):
-  if (n.get('text') or '').startswith(t) or n.get('content-desc')==t:
-    x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds'))); print((x1+x2)//2,(y1+y2)//2); break
+t=sys.argv[1]; ns=list(E.parse('/tmp/ui.xml').iter('node'))
+def c(n): x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds'))); return f"{(x1+x2)//2} {(y1+y2)//2}"
+hit=[n for n in ns if n.get('text')==t or n.get('content-desc')==t] or [n for n in ns if (n.get('text') or '').startswith(t)]
+if hit: print(c(hit[-1]))
 PY
 )
   [ -n "$b" ] && adb shell input tap $b && echo "tap '$1' @ $b" || echo "NOT FOUND '$1'"
@@ -59,9 +59,9 @@ adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 
 { tap "Меню"; sleep 2
   for i in 1 2 3 4 5; do tap "Синхронізація" | grep -q "^tap" && break; adb shell input swipe 120 560 120 160 300; sleep 1; done
   sleep 2; shot 1_net
-  tap "IP хаба (напр. 192.168.0.5)"; adb shell input text 127.0.0.1; sleep 1
-  tap "Код (XXXX-XXXX-XXXX-XXXX)"; adb shell input text ABCD-EFGH-JKMN-PQRS; sleep 1
-  adb shell input keyevent 111; sleep 1
+  tap "IP хаба (напр. 192.168.0.5)"; sleep 1; adb shell input text 127.0.0.1; adb shell input keyevent 111; sleep 1
+  tap "Код (XXXX-XXXX-XXXX-XXXX)"; sleep 1; adb shell input text ABCDEFGHJKMNPQRS; adb shell input keyevent 111; sleep 1
+  shot 1b_filled
   tap "Підключитися"; sleep 8; shot 2_after; } > smoke/sync_steps.txt 2>&1
 kill $HUB 2>/dev/null
 echo "sync hub_got=$(cat smoke/hub_got.txt 2>/dev/null || echo NONE)" >> smoke/result.txt
