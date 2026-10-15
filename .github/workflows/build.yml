@@ -23,11 +23,25 @@ jobs:
       - name: assembleDebug
         run: |
           set -o pipefail
-          gradle :app:assembleDebug --no-daemon 2>&1 | tee build.log
+          gradle :app:assembleDebug :app:assembleRelease --no-daemon 2>&1 | tee build.log
       - name: errors
         if: failure()
         run: |
           grep -E '^e: |error:|What went wrong' -A3 build.log | head -300
+      - name: enable KVM
+        if: success()
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: smoke test on emulator
+        if: success()
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash .github/smoke.sh
       - uses: actions/upload-artifact@v4
         if: success()
         with: { name: Report-debug, path: app/build/outputs/apk/debug/*.apk }
@@ -40,7 +54,8 @@ jobs:
           mkdir -p /tmp/pub && cd /tmp/pub && git init -q -b ci-log
           cp $GITHUB_WORKSPACE/build.log . 2>/dev/null || echo "no build.log" > build.log
           grep -nE '^e: |^w: .*(unresolved|Unresolved)|error:|What went wrong|FAILURE' -A4 build.log > errors.txt || true
-          cp $GITHUB_WORKSPACE/app/build/outputs/apk/debug/*.apk . 2>/dev/null || true
+          cp $GITHUB_WORKSPACE/app/build/outputs/apk/debug/*.apk $GITHUB_WORKSPACE/app/build/outputs/apk/release/*.apk . 2>/dev/null || true
+          cp $GITHUB_WORKSPACE/smoke/* . 2>/dev/null || true
           echo "${{ github.sha }} ${{ job.status }}" > STATUS
           git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "ci ${{ github.sha }}"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-log

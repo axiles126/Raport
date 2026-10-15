@@ -1,2 +1,8 @@
-# Reconstructed: no app-specific rules could be recovered from the APK.
-# kotlinx.serialization, ktor and zxing ship their own consumer rules.
+# The original APK was built with R8 optimizations but without obfuscation
+# (all class/method names are intact), i.e. -dontobfuscate.
+-dontobfuscate
+# Ktor server/client reference JVM-only classes that do not exist on Android.
+-dontwarn java.lang.management.**
+-dontwarn org.slf4j.**
+-dontwarn javax.naming.**
+-dontwarn io.ktor.**

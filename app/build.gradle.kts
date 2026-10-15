@@ -24,6 +24,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Test signing only: the original APK was signed with the author's own key (CN=Report, C=UA).
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
