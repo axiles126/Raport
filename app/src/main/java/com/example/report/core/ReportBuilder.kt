@@ -26,7 +26,8 @@ object ReportBuilder {
 
     /**
      * Final text right before sending/copying. Day/Night: every line after the "HH:MM-HH:MM date"
-     * header is (re)numbered 1..N — lines typed by hand get numbers too — and "Позиція БГ" stays last.
+     * header is (re)numbered 1..N. Hand-typed lines get numbers and go before "Втрати БпЛА";
+     * the fixed tail (Втрати … Позиція БГ) always stays at the end.
      */
     fun finalize(mode: String, text: String): String {
         if (mode != "day" && mode != "night") return text
@@ -34,7 +35,12 @@ object ReportBuilder {
         val h = lines.indexOfFirst { TIME_RANGE.containsMatchIn(it) }
         if (h < 0) return text
         val items = lines.drop(h + 1).map { it.replace(NUM_PREFIX, "").trim() }.filter { it.isNotBlank() }
-        val body = items.filterNot { it.trim().equals(POS_BG, ignoreCase = true) } + POS_BG
+        // Fixed tail always last, in this order; everything else (incl. hand-typed lines) goes before it.
+        val tailKeys = listOf("Втрати БпЛА", "Пошкодження БпЛА", "Витрачено пропелерів", "Дронів на позиції", POS_BG)
+        fun tailIdx(s: String) = tailKeys.indexOfFirst { s.startsWith(it, ignoreCase = true) }
+        val tail = items.filter { tailIdx(it) >= 0 }.sortedBy { tailIdx(it) }
+            .let { t -> if (t.any { tailIdx(it) == tailKeys.lastIndex }) t else t + POS_BG }
+        val body = items.filter { tailIdx(it) < 0 } + tail
         return (lines.take(h + 1) + body.mapIndexed { n, s -> "${n + 1}. $s" }).joinToString("\n")
     }
 
