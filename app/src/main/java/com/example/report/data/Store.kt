@@ -25,7 +25,8 @@ import kotlinx.serialization.json.Json
  *  Other:   kap_wxcache (weather cache, owned by ui)
  */
 class Store(context: Context) {
-    val sp: SharedPreferences = context.getSharedPreferences("kapibara", Context.MODE_PRIVATE)
+    /** Encrypted (see [SecurePrefs]); same keys as the original plain "kapibara" file. */
+    val sp: SharedPreferences = SecurePrefs.get(context)
 
     val json: Json = Json {
         ignoreUnknownKeys = true

@@ -6,3 +6,8 @@
 -dontwarn org.slf4j.**
 -dontwarn javax.naming.**
 -dontwarn io.ktor.**
+# Tink (security-crypto) compile-only annotations
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
+-dontwarn com.google.api.client.**
+-dontwarn org.joda.time.**

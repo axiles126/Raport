@@ -17,8 +17,8 @@ android {
         applicationId = "io.github.axiles126.report"
         minSdk = 29
         targetSdk = 37
-        versionCode = 20
-        versionName = "2.9"
+        versionCode = 21
+        versionName = "3.0"
     }
 
     signingConfigs {
@@ -87,6 +87,7 @@ dependencies {
     // slf4j-api, typesafe-config and kotlinx-coroutines-slf4j come in transitively (no slf4j binding in the APK).
 
     // Map + QR pairing
+    implementation("androidx.security:security-crypto:1.1.0-alpha06") // encrypted prefs (Keystore AES-256)
     implementation("org.osmdroid:osmdroid-android:6.1.20") // TODO(decomp): version not recorded
     implementation("com.journeyapps:zxing-android-embedded:4.3.0") // TODO(decomp): version not recorded
 }

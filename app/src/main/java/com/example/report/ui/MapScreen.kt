@@ -82,6 +82,8 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Polyline
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Map
@@ -131,15 +133,21 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
     var showRoutes by remember { mutableStateOf(false) }
     var showSave by remember { mutableStateOf(false) }
     var showDrawMenu by remember { mutableStateOf(false) }
+    var showOffline by remember { mutableStateOf(false) }
+    var offline by remember { mutableStateOf(vm.store.bool("kap_map_offline")) }
     val heading = rememberHeading(compassOn)
 
     val mapView = remember {
         Configuration.getInstance().load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
         Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Linux; Android)" // don't announce the app id to the tile server
+        // Tile cache in the app's private folder (not shared storage).
+        Configuration.getInstance().osmdroidBasePath = java.io.File(context.filesDir, "osmdroid")
+        Configuration.getInstance().osmdroidTileCache = java.io.File(context.filesDir, "osmdroid/tiles")
+        Configuration.getInstance().tileFileSystemCacheMaxBytes = 2_000L * 1024 * 1024
         MapView(context).apply {
             setTileSource(ArcGisSat)
             setMultiTouchControls(true)
-            setUseDataConnection(true)
+            setUseDataConnection(!vm.store.bool("kap_map_offline"))
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             controller.setZoom(6.0)
             controller.setCenter(GeoPoint(49.0, 32.0))
@@ -318,6 +326,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             })
             MapIconBtn(Icons.Filled.Explore, "Компас", compassOn, onClick = { compassOn = !compassOn })
             MapIconBtn(Icons.Filled.Edit, "Малювання", drawMode != 0, onClick = { showDrawMenu = true })
+            MapIconBtn(if (offline) Icons.Filled.CloudOff else Icons.Filled.Cloud, "Офлайн-карта", offline, onClick = { showOffline = true })
             MapIconBtn(Icons.Filled.DeleteSweep, "Очистити точки", onClick = {
                 if (vm.points.isNotEmpty()) {
                     vm.clearPoints()
@@ -376,6 +385,10 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
         )
     }
 
+    if (showOffline) OfflineMapDialog(
+        mapView, offline,
+        onOffline = { on -> offline = on; vm.store.putBool("kap_map_offline", on); mapView.setUseDataConnection(!on); mapView.invalidate() },
+    ) { showOffline = false }
     if (showDrawMenu) DrawMenu(
         drawMode, vm.drawClosed, vm.route.isNotEmpty(),
         onPick = { m, closed -> drawMode = m; vm.drawClosed = closed; showDrawMenu = false; rev++ },
@@ -691,3 +704,53 @@ fun routeLength(pts: List<Pair<Double, Double>>): Double {
 }
 
 fun fmtDist(m: Double): String = if (m < 1000) "${m.toInt()} м" else String.format(java.util.Locale.US, "%.2f км", m / 1000)
+
+/** Offline map: «only cached tiles» switch + download of the visible area for a zoom range. */
+@Composable
+private fun OfflineMapDialog(mapView: MapView, offline: Boolean, onOffline: (Boolean) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val z = mapView.zoomLevelDouble.toInt().coerceIn(1, 18)
+    var zMax by remember { mutableIntStateOf(minOf(z + 3, 18)) }
+    val bbox = remember { mapView.boundingBox }
+    val cm = remember { org.osmdroid.tileprovider.cachemanager.CacheManager(mapView) }
+    val tiles = remember(zMax) { cm.possibleTilesInArea(bbox, z, zMax) }
+    val cacheMb = remember { (java.io.File(context.filesDir, "osmdroid").walkTopDown().filter { it.isFile }.sumOf { it.length() } / 1_048_576) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Офлайн-карта") },
+        text = {
+            Column {
+                androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Тільки збережені тайли (без інтернету)", Modifier.weight(1f), fontSize = 14.sp)
+                    androidx.compose.material3.Switch(offline, onOffline)
+                }
+                Text("У цьому режимі карта нічого не завантажує — сервер карт не бачить, де ви дивитесь.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.size(12.dp))
+                Text("Зберегти видимий район: зум $z–$zMax · $tiles тайлів (~${tiles * 25 / 1024 + 1} МБ)", fontSize = 13.sp)
+                androidx.compose.foundation.layout.Row {
+                    TextButton(onClick = { if (zMax > z) zMax-- }) { Text("− деталь") }
+                    TextButton(onClick = { if (zMax < 18) zMax++ }) { Text("+ деталь") }
+                }
+                Text("Завантажуйте заздалегідь, у безпечному місці: під час завантаження сервер карт бачить цей район.",
+                    fontSize = 12.sp, color = ErrRed)
+                Spacer(Modifier.size(8.dp))
+                Text("Збережено: $cacheMb МБ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                cm.downloadAreaAsync(context, bbox, z, zMax)
+                onDismiss()
+            }, enabled = tiles in 1..60_000) { Text("Завантажити", color = OkGreen) }
+        },
+        dismissButton = {
+            androidx.compose.foundation.layout.Row {
+                TextButton(onClick = {
+                    java.io.File(context.filesDir, "osmdroid").deleteRecursively(); onDismiss()
+                }) { Text("Очистити кеш", color = ErrRed) }
+                TextButton(onClick = onDismiss) { Text("Закрити") }
+            }
+        },
+    )
+}

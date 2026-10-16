@@ -71,4 +71,23 @@ adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 
   tap "Підключитися"; sleep 20; shot 2_after; } > smoke/sync_steps.txt 2>&1
 kill $HUB 2>/dev/null
 echo "sync connections=$(wc -l < smoke/hub_got.txt 2>/dev/null || echo 0) first=$(head -1 smoke/hub_got.txt 2>/dev/null)" >> smoke/result.txt
-exit 0
+
+# --- migration: plain prefs from the previous build must end up encrypted, data kept ---
+PKG=io.github.axiles126.report
+git show FETCH_HEAD:original.apk >/dev/null 2>&1
+git fetch -q --depth 1 origin ci-log && git show FETCH_HEAD:app-release.apk > /tmp/prev.apk 2>/dev/null
+NEW=$(ls app/build/outputs/apk/release/*.apk | head -1)
+{
+  adb root >/dev/null 2>&1; sleep 3
+  adb uninstall $PKG >/dev/null 2>&1
+  adb install -r -g /tmp/prev.apk && adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 5
+  adb shell am force-stop $PKG
+  printf '<?xml version="1.0" encoding="utf-8"?>\n<map>\n<string name="kap_name">MIGRTEST</string>\n</map>\n' > /tmp/kapibara.xml
+  OWNER=$(adb shell stat -c %u:%g /data/data/$PKG | tr -d '\r')
+  adb push /tmp/kapibara.xml /data/data/$PKG/shared_prefs/kapibara.xml && adb shell chown $OWNER /data/data/$PKG/shared_prefs/kapibara.xml
+  adb install -r -g "$NEW" && adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 6
+  adb shell ls /data/data/$PKG/shared_prefs/
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb shell cat /sdcard/ui.xml | grep -o 'MIGRTEST' | head -1
+  adb shell grep -c MIGRTEST /data/data/$PKG/shared_prefs/kapibara_enc.xml
+} > smoke/migration.txt 2>&1
+echo "migration: $(grep -c 'kapibara_enc.xml' smoke/migration.txt) enc, plain_left=$(grep -c '^kapibara.xml' smoke/migration.txt), ui=$(grep -c '^MIGRTEST' smoke/migration.txt)" >> smoke/result.txt

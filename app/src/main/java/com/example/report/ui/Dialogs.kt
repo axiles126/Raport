@@ -111,6 +111,10 @@ fun SettingsDialog(vm: ReportViewModel, dismiss: () -> Unit) {
                 HorizontalDivider(color = cs.outline)
                 Spacer(Modifier.height(12.dp))
 
+                SecuritySection()
+                HorizontalDivider(color = cs.outline)
+                Spacer(Modifier.height(12.dp))
+
                 // ---- report periods
                 Text(
                     "ЧАС ЗВІТІВ",

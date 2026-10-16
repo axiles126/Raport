@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) takeLoss(intent)
+        if (savedInstanceState == null) { takeLoss(intent); com.example.report.core.AppLock.onAppStart(this) }
         setContent {
             val vm: ReportViewModel = viewModel()
             val dark = when (vm.themeMode) {
@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
             }
             ReportTheme(dark) {
                 Surface(Modifier.fillMaxSize()) { App(vm) }
+                if (com.example.report.core.AppLock.locked) com.example.report.ui.LockScreen()
                 LaunchedEffect(pendingLoss) {
                     pendingLoss?.let { (cause, at) ->
                         vm.reportLoss(at, cause)
@@ -94,6 +95,16 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         takeLoss(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        com.example.report.core.AppLock.onForeground(this)
+    }
+
+    override fun onStop() {
+        com.example.report.core.AppLock.onBackground()
+        super.onStop()
     }
 
     override fun onResume() {
