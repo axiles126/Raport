@@ -260,7 +260,8 @@ fun LossScreen(
 
             HorizontalDivider(color = cs.outline)
             Text(
-                "Посадку відмічено · втрата піде у звіт «День/Ніч» за часом втрати",
+                "Посадку відмічено · втрата піде у звіт «День/Ніч» за часом втрати" +
+                    (if (draft.decName.isNotEmpty()) " · «Дронів на позиції» ${draft.decName}: −1" else ""),
                 Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 color = cs.onSurfaceVariant,
                 fontSize = 11.sp,
