@@ -158,6 +158,11 @@ class OverlayService : Service() {
             val yes = popupBtn(if (flying) "СІВ" else "ВЗЛІТ", if (flying) RED else GREEN) { confirmToggle() }
             if (flying) {
                 box.addView(row(no, yes, popupBtn("ВТРАТА БОРТУ", ORANGE) { showLossPopup() }))
+                box.addView(
+                    popupBtn("НЕ ЗБЕРІГАТИ ВИЛІТ", DIM) { showCancelPopup() },
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                        .apply { topMargin = px(10) },
+                )
             } else {
                 box.addView(row(no, yes))
             }
@@ -182,10 +187,31 @@ class OverlayService : Service() {
                 )
             }
             box.addView(
+                popupBtn("СВОЯ ПРИЧИНА…", ORANGE) { reportLoss(Loss.CUSTOM) },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    .apply { topMargin = px(10) },
+            )
+            box.addView(
                 popupBtn("НАЗАД", DIM) { showFlightPopup() },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                     .apply { topMargin = px(10) },
             )
+        }
+    }
+
+    /** «Не зберігати виліт»: confirm, then drop the active flight (mis-pressed takeoff). */
+    private fun showCancelPopup() {
+        showPopup("Видалити виліт? У звіти не піде", 8000L) { box ->
+            box.addView(row(
+                popupBtn("НАЗАД", DIM) { showFlightPopup() },
+                popupBtn("ВИДАЛИТИ", RED) {
+                    dismissConfirm()
+                    FlightBridge.cancelFlight?.invoke() ?: FlightBridge.storeCancel(this)
+                    FlightBridge.onStateChanged?.invoke()
+                    refreshIcon()
+                    vibrate()
+                },
+            ))
         }
     }
 

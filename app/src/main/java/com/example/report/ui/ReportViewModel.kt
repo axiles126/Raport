@@ -305,6 +305,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         FlightBridge.isFlying = { hasActiveFlight() }
         FlightBridge.takeoff = { takeoff() }
         FlightBridge.landing = { landing(true) }
+        FlightBridge.cancelFlight = { cancelActiveFlight() }
         FlightBridge.templates = { templates.toList() }
         FlightBridge.insertTemplate = { insertTemplate(it) }
         FlightBridge.attachCoords = { attachCoordsToLast(it) }
@@ -356,6 +357,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         FlightBridge.isFlying = null
         FlightBridge.takeoff = null
         FlightBridge.landing = null
+        FlightBridge.cancelFlight = null
         FlightBridge.templates = null
         FlightBridge.insertTemplate = null
         FlightBridge.attachCoords = null

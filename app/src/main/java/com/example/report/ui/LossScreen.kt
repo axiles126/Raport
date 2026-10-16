@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -149,6 +150,34 @@ fun LossScreen(
                             )
                         }
                     }
+                }
+                Spacer(Modifier.height(8.dp))
+                val custom = Loss.isCustom(draft.cause)
+                OutlinedButton(
+                    onClick = { if (!custom) changeLossCause(vm, Loss.CUSTOM) },
+                    modifier = Modifier.fillMaxWidth(),
+                    border = BorderStroke(if (custom) 2.dp else 1.dp, if (custom) ErrRed else cs.outline),
+                ) {
+                    Text(
+                        "СВОЯ ПРИЧИНА",
+                        color = if (custom) ErrRed else cs.onSurface,
+                        fontSize = 12.sp,
+                        fontWeight = if (custom) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+                if (custom) {
+                    Spacer(Modifier.height(6.dp))
+                    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+                    OutlinedTextField(
+                        value = Loss.customText(draft.cause),
+                        onValueChange = { changeLossCause(vm, Loss.CUSTOM + it.replace("\n", " ").take(120)) },
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        label = { Text("Причина втрати") },
+                        placeholder = { Text("напр. технічної несправності") },
+                        supportingText = { Text("У звіті: «Втрата дрону внаслідок …»") },
+                        singleLine = true,
+                    )
+                    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(

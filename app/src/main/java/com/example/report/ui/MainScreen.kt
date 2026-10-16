@@ -27,7 +27,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.ContentCopy
@@ -97,7 +99,7 @@ private val THEMES = listOf(
  * Main screen: flight timer with takeoff/landing, templates, report mode tabs, report preview
  * and the editor; the "☰" drawer holds position data and screen settings.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     vm: ReportViewModel,
@@ -115,6 +117,7 @@ fun MainScreen(
     var droneDraft by remember { mutableStateOf<DroneDraft?>(null) }
     var showDroneMenu by remember { mutableStateOf(false) }
     var confirmCancelFlight by remember { mutableStateOf(false) }
+    var showLandMenu by remember { mutableStateOf(false) }
     var droneScanRequest by remember { mutableStateOf<String?>(null) }
     var deleteTemplates by remember { mutableStateOf(false) }
     var showEditor by remember { mutableStateOf(false) }
@@ -205,7 +208,16 @@ fun MainScreen(
 
                         // ---- takeoff / landing ----
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            TextButton(onClick = { vm.toggleFlight() }) {
+                            // tap = takeoff/landing; long press while flying = «Посадка?» menu (втрата / не зберігати)
+                            Box(
+                                Modifier
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                                    .combinedClickable(
+                                        onClick = { vm.toggleFlight() },
+                                        onLongClick = { if (vm.flying) showLandMenu = true },
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                            ) {
                                 Text(
                                     if (vm.flying) "СІВ" else "ВЗЛІТ ПІШОВ",
                                     color = if (vm.flying) ErrRed else OkGreen,
@@ -234,26 +246,15 @@ fun MainScreen(
                                 Text("ДРОН", color = cs.primary, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                             }
                         }
-                        if (vm.flying) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                TextButton(onClick = { showLoss = true }) {
-                                    Text("Втрата борту", color = ErrRed.copy(alpha = 0.8f), fontSize = 13.sp)
-                                }
-                                TextButton(onClick = { confirmCancelFlight = true }) {
-                                    Text("Не зберігати виліт", color = cs.onSurfaceVariant, fontSize = 13.sp)
-                                }
-                            }
-                        }
                         Spacer(Modifier.height(4.dp))
 
                         // ---- templates toggle + copy ----
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            IconButton(onClick = { showTemplates = !showTemplates }) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Label,
-                                    "Шаблони",
-                                    tint = if (showTemplates) OkGreen else cs.onSurfaceVariant,
-                                )
+                            TextButton(onClick = { showTemplates = !showTemplates }) {
+                                val tc = if (showTemplates) OkGreen else cs.onSurfaceVariant
+                                Icon(Icons.AutoMirrored.Filled.FormatListBulleted, null, tint = tc)
+                                Spacer(Modifier.width(6.dp))
+                                Text("ШАБЛОНИ", color = tc, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                             IconButton(onClick = onCopy) {
                                 Icon(Icons.Filled.ContentCopy, "Скопіювати", tint = cs.onSurfaceVariant)
@@ -453,6 +454,10 @@ fun MainScreen(
                             Text(Loss.label(cause), color = ErrRed, fontSize = 16.sp)
                         }
                     }
+                    TextButton(
+                        onClick = { showLoss = false; vm.reportLoss(System.currentTimeMillis(), Loss.CUSTOM) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Своя причина…", color = ErrRed, fontSize = 16.sp) }
                 }
             },
         )
@@ -468,6 +473,27 @@ fun MainScreen(
         ) { DroneInScreen(vm) { showDrones = false } }
     }
     droneDraft?.let { DroneEntryDialog(vm, it) { droneDraft = null } }
+    if (showLandMenu) {
+        AlertDialog(
+            onDismissRequest = { showLandMenu = false },
+            title = { Text("Посадка?") },
+            text = {
+                Column {
+                    TextButton(onClick = { showLandMenu = false; if (vm.flying) vm.toggleFlight() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("СІВ", color = ErrRed, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(onClick = { showLandMenu = false; showLoss = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("ВТРАТА БОРТУ", color = ErrRed, fontSize = 16.sp)
+                    }
+                    TextButton(onClick = { showLandMenu = false; confirmCancelFlight = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("НЕ ЗБЕРІГАТИ ВИЛІТ", color = cs.onSurface, fontSize = 16.sp)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showLandMenu = false }) { Text("НІ") } },
+        )
+    }
+
     if (confirmCancelFlight) {
         AlertDialog(
             onDismissRequest = { confirmCancelFlight = false },

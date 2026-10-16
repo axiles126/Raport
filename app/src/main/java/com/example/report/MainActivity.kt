@@ -123,7 +123,7 @@ class MainActivity : ComponentActivity() {
         val cause = intent?.getStringExtra("loss_cause") ?: return
         // Only our own OverlayService may trigger a loss: MainActivity is exported (launcher), so any app could send this.
         if (intent.getStringExtra("loss_tok") != FlightBridge.lossToken) { intent.removeExtra("loss_cause"); return }
-        if (cause !in com.example.report.core.Loss.CAUSES) return
+        if (!com.example.report.core.Loss.isValid(cause)) return
         pendingLoss = cause to intent.getLongExtra("loss_at", System.currentTimeMillis())
         intent.removeExtra("loss_cause")
     }

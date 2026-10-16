@@ -22,6 +22,8 @@ object FlightBridge {
     var isFlying: (() -> Boolean)? = null
     var takeoff: (() -> Unit)? = null
     var landing: (() -> Unit)? = null
+    /** «Не зберігати виліт»: drops the active flight. */
+    var cancelFlight: (() -> Unit)? = null
     var templates: (() -> List<String>)? = null
     var insertTemplate: ((String) -> Unit)? = null
     /** Attaches MGRS to the last line of the active (or latest) flight. */
@@ -64,6 +66,13 @@ object FlightBridge {
             flights.add(Flight(System.currentTimeMillis()))
         }
         saveFlights(store, flights)
+    }
+
+    /** Fallback for [cancelFlight] when the app UI is not running. */
+    fun storeCancel(context: Context) {
+        val store = Store(context)
+        val flights = loadFlights(store)
+        if (flights.removeAll { it.lt == null }) saveFlights(store, flights)
     }
 
     /**
