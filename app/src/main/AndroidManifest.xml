@@ -104,6 +104,14 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Own scanner: follows rotation (portrait + landscape), torch button. -->
+        <activity
+            android:name=".scan.ScanActivity"
+            android:exported="false"
+            android:screenOrientation="fullSensor"
+            android:stateNotNeeded="true"
+            android:theme="@style/zxing_CaptureTheme"
+            android:windowSoftInputMode="stateAlwaysHidden" />
         <!-- zxing-android-embedded: landscape-locked scanner (overrides library default orientation). -->
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"

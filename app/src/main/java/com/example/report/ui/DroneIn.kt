@@ -64,6 +64,7 @@ fun droneScanOptions(): ScanOptions = ScanOptions()
     .setPrompt("Скануйте QR дрона")
     .setBeepEnabled(true)
     .setOrientationLocked(false)
+    .setCaptureActivity(com.example.report.scan.ScanActivity::class.java)
 
 private fun kindTitle(kind: String) = if (kind == DRONE_OUT) "Переданий дрон" else "Заїхав дрон"
 

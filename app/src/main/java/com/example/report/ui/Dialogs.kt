@@ -540,7 +540,8 @@ fun NetworkDialog(vm: ReportViewModel, dismiss: () -> Unit) {
                                     .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                                     .setPrompt("Скануйте QR хаба")
                                     .setBeepEnabled(false)
-                                    .setOrientationLocked(false),
+                                    .setOrientationLocked(false)
+                                    .setCaptureActivity(com.example.report.scan.ScanActivity::class.java),
                             )
                         }) { Text("📷 Сканувати QR хаба", color = OkGreen) }
                         Spacer(Modifier.height(6.dp))
