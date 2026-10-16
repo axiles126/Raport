@@ -1196,7 +1196,12 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             tail = tail.filter { it.isDigit() }.take(4),
             kind = kind,
         )
+        val prev = droneIns.getOrNull(index)
         if (index in droneIns.indices) droneIns[index] = d else droneIns.add(d)
+        // «Переданий» drone leaves the position: −1 in «Дронів на позиції» (and back if un-marked)
+        var pos = ""
+        if (kind == "out" && prev?.kind != "out") pos = takeDroneFromPosition(m).let { if (it.isNotEmpty()) " · на позиції «$it» −1" else "" }
+        else if (kind != "out" && prev?.kind == "out") pos = giveDroneToPosition(prev.model).let { if (it.isNotEmpty()) " · на позиції «$it» +1" else "" }
         droneModel = m
         store.putString("kap_drone_model", m)
         saveDroneIns()
@@ -1204,13 +1209,23 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val n = list.indexOfFirst { it.value === d } + 1
         val dup = d.code.isNotEmpty() && list.count { it.value.code == d.code } > 1
         val what = if (kind == "out") "Переданий дрон" else "Заїхав дрон"
-        setStatus((if (dup) "⚠ $what №$n — цей номер уже є у списку" else "✓ $what №$n"), if (dup) "err" else "ok")
+        setStatus((if (dup) "⚠ $what №$n — цей номер уже є у списку" else "✓ $what №$n") + pos, if (dup) "err" else "ok")
         return n
     }
 
     fun removeDroneEntry(index: Int) {
         if (index !in droneIns.indices) return
-        droneIns.removeAt(index); saveDroneIns()
+        val d = droneIns.removeAt(index); saveDroneIns()
+        if (d.kind == "out") giveDroneToPosition(d.model) // removed by mistake → back on position
+    }
+
+    /** +1 to the «Дронів на позиції» type of [model]. Returns the type name ("" if none). */
+    private fun giveDroneToPosition(model: String): String {
+        val i = positionTypeFor(model)
+        if (i < 0) return ""
+        val q = dayCfg.drones[i]
+        updateDrone(i, null, q.qty + 1)
+        return q.name
     }
 
     fun clearDrones(kind: String) { droneIns.removeAll { it.kind == kind }; saveDroneIns() }
