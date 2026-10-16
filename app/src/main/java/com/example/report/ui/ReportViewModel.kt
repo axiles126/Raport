@@ -1195,6 +1195,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             model = m,
             tail = tail.filter { it.isDigit() }.take(4),
             kind = kind,
+            pos = droneIns.getOrNull(index)?.pos ?: false,
         )
         val prev = droneIns.getOrNull(index)
         if (index in droneIns.indices) droneIns[index] = d else droneIns.add(d)
@@ -1214,6 +1215,13 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val what = if (kind == "out") "Переданий дрон" else "Заїхав дрон"
         setStatus((if (dup) "⚠ $what №$n — цей номер уже є у списку" else "✓ $what №$n") + pos, if (dup) "err" else "ok")
         return n
+    }
+
+    /** «На позиції» mark (just a note, synced, not in reports). */
+    fun toggleDronePos(index: Int) {
+        val d = droneIns.getOrNull(index) ?: return
+        droneIns[index] = d.copy(pos = !d.pos)
+        saveDroneIns()
     }
 
     fun removeDroneEntry(index: Int) {

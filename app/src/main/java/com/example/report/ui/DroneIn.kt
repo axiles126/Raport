@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -153,6 +155,12 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
                 IconButton(onClick = close) { Icon(Icons.Filled.Close, "Закрити", tint = cs.onSurface) }
             }
             HorizontalDivider(color = cs.outline)
+            val onPos = vm.droneIns.filter { it.pos }
+            if (onPos.isNotEmpty()) Text(
+                "На позиції: " + onPos.joinToString(", ") { "${it.model} (${it.tail})" },
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                color = OkGreen, fontSize = 12.sp,
+            )
 
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 if (list.isEmpty()) item {
@@ -167,10 +175,21 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("${n + 1}.", Modifier.width(36.dp), color = cs.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                        Text(
-                            "${d.model} (${d.tail.ifEmpty { "    " }}) ${d.code}", Modifier.weight(1f),
-                            color = if (d.tail.isEmpty()) ErrRed else cs.onSurface, fontSize = 15.sp,
-                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${d.model} (${d.tail.ifEmpty { "    " }}) ${d.code}",
+                                color = if (d.pos) OkGreen else if (d.tail.isEmpty()) ErrRed else cs.onSurface, fontSize = 15.sp,
+                                fontWeight = if (d.pos) FontWeight.Bold else FontWeight.Normal,
+                            )
+                            if (d.pos) Text("на позиції", color = OkGreen, fontSize = 11.sp)
+                        }
+                        IconButton(onClick = { vm.toggleDronePos(idx) }) {
+                            Icon(
+                                if (d.pos) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                if (d.pos) "Зняти позначку «на позиції»" else "Позначити «на позиції»",
+                                tint = if (d.pos) OkGreen else cs.outline,
+                            )
+                        }
                         IconButton(onClick = { removeAt = idx }) { Icon(Icons.Filled.Close, "Видалити", tint = cs.outline) }
                     }
                 }

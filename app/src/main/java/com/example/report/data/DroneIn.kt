@@ -13,4 +13,6 @@ data class DroneIn(
     val model: String = "Matrice 4T",
     val tail: String = "",
     val kind: String = "in",
+    /** Marked as the one in use on the position (only a note — not in any report). */
+    val pos: Boolean = false,
 )
