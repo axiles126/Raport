@@ -833,13 +833,14 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             append(TimeFmt.fmtD(d.at)).append(' ').append(TimeFmt.hm(d.at))
             if (name.isNotBlank()) append(", СП \"").append(name.trim()).append('"')
             append(".\n")
-            append(Loss.line(d.cause))
-            append(".\nОрієнтовні координати: ")
+            append(Loss.line(d.cause)).append(".")
+            // drone right after the cause
+            append("\nДрон: ").append(d.drone.trim())
+            if (d.tail.isNotBlank() || d.serial.isNotBlank()) append(" (").append(d.tail.ifEmpty { "    " }).append(") ").append(d.serial.trim())
+            append("\nОрієнтовні координати: ")
             append(d.coords.trim().ifEmpty { "—" })
             append("\nПілот: ").append(d.pilot.trim())
             if (d.surname.isNotBlank()) append("\nПрізвище пілота: ").append(d.surname.trim())
-            append("\nДрон: ").append(d.drone.trim())
-            if (d.tail.isNotBlank() || d.serial.isNotBlank()) append(" (").append(d.tail.ifEmpty { "    " }).append(") ").append(d.serial.trim())
         }
     }
 
