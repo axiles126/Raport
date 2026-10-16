@@ -255,8 +255,9 @@ object ReportBuilder {
         }
         if (scoutAuto && cursor < to) out += scout(cursor, to)
 
+        // sorties of THIS shift window (not a rolling 24 h — that's the counter at the top)
         val sorties = input.sortieCount.trim().toIntOrNull()
-            ?: input.flights.count { it.t >= input.now - DAY }
+            ?: input.flights.count { it.t in from until to }
         out += "За час добової зміни здійснено $sorties вильотів."
         out += "Без втрат чи поранень серед особового складу СП $name: Інформацію про події та виявлені цілі було передано оперативному черговому."
         return out.joinToString("\n")
