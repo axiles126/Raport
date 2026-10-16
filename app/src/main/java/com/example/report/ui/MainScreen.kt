@@ -32,6 +32,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -111,6 +112,7 @@ fun MainScreen(
     onOpenSettings: () -> Unit,
     onShareApk: () -> Unit,
     onOpenStrike: () -> Unit = {},
+    onOpenArchive: () -> Unit = {},
 ) {
     var showTemplates by remember { mutableStateOf(false) }
     var showDrones by remember { mutableStateOf(false) }
@@ -358,6 +360,9 @@ fun MainScreen(
                             }
                             IconButton(onClick = onOpenStrike) {
                                 Icon(Icons.Filled.GpsFixed, "Ураження", tint = ErrRed)
+                            }
+                            IconButton(onClick = onOpenArchive) {
+                                Icon(Icons.Filled.History, "Архів звітів", tint = cs.onSurface)
                             }
                         }
 

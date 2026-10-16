@@ -137,6 +137,7 @@ fun App(vm: ReportViewModel) {
     var showPad by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showStrike by remember { mutableStateOf(false) }
+    var showArchive by remember { mutableStateOf(false) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     LaunchedEffect(Unit) {
@@ -219,7 +220,11 @@ fun App(vm: ReportViewModel) {
             { showSettings = true },
             { shareApk(context, vm) },
             onOpenStrike = { showStrike = true },
+            onOpenArchive = { showArchive = true },
         )
+        if (showArchive) {
+            com.example.report.ui.ArchiveScreen(vm) { showArchive = false }
+        }
         if (showStrike) {
             StrikeScreen(vm, { showMap = true }) { showStrike = false }
         }
@@ -262,7 +267,7 @@ fun App(vm: ReportViewModel) {
 }
 
 private fun reportText(vm: ReportViewModel): String =
-    ReportBuilder.finalize(vm.mode, if (vm.previewVisible) vm.previewText else vm.buildReport())
+    ReportBuilder.finalize(vm.mode, vm.textForSend())
 
 private fun doCopy(context: Context, vm: ReportViewModel) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.report.alarm.ReportAlarmReceiver
 import com.example.report.core.Coords
 import com.example.report.core.Loss
+import com.example.report.core.Merge3
 import com.example.report.core.Mgrs
 import com.example.report.core.ReportBuilder
 import com.example.report.core.ReportInput
@@ -222,6 +223,10 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     var statusCls by mutableStateOf("dim")
     var previewVisible by mutableStateOf(true)
     var previewText by mutableStateOf("")
+    /** Auto text the (possibly edited) preview was derived from — base for the 3-way merge. */
+    private var previewBase = ""
+    /** Same for per-flight saved reports in «Зараз» mode (in memory). */
+    private val repBase = HashMap<Long, String>()
     var previewEdited by mutableStateOf(false)
     /** Bumped on every data change; read by [buildReport] so Compose recomputes. */
     var dataRev by mutableStateOf(0)
@@ -273,6 +278,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         droneModel = sp.getString("kap_drone_model", "Matrice 4T") ?: "Matrice 4T"
         strike = store.load<StrikeDraft>("kap_strike", StrikeDraft())
         routes.addAll(store.load<List<Route>>("kap_routes", emptyList()))
+        archEdits.putAll(store.load<Map<String, ArchEdit>>("kap_arch_edits", emptyMap()))
 
         val savedSchedules = store.load<List<ScheduledSend>>("kap_schedules", emptyList())
         schedules.clear()
@@ -344,7 +350,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 delay(30_000)
                 saveFlights()
                 saveEvents()
-                if (!previewEdited) updatePreview(false)
+                syncPreview()
             }
         }
     }
@@ -412,8 +418,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     // ==== report ==============================================================================
 
-    fun buildReport(): String {
+    fun buildReport(stripRep: Boolean = false): String {
         dataRev // read so Compose callers recompose on data changes
+        val cur = curRec().let { if (stripRep) it?.copy(rep = null) else it }
         return ReportBuilder.build(
             ReportInput(
                 mode = mode,
@@ -432,7 +439,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 showAir = showAir,
                 showCountShift = showCountShift,
                 now = System.currentTimeMillis(),
-                curRec = curRec(),
+                curRec = cur,
                 activeRec = activeRec(),
                 flying = flying,
                 startTs = startTs,
@@ -442,13 +449,153 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    /** Text to send/copy: the editor text (with manual edits, refreshed from the data). */
+    fun textForSend(): String {
+        syncPreview()
+        return previewText.ifEmpty { buildReport() }
+    }
+
+    // ==== report archive (past days: День / Ніч / Доба) =====================================
+
+    /** Manual edits of archived reports: key "mode|dayMidnight" → (auto base, edited text). */
+    @kotlinx.serialization.Serializable
+    data class ArchEdit(val base: String, val text: String)
+    val archEdits = androidx.compose.runtime.mutableStateMapOf<String, ArchEdit>()
+
+    fun archKey(mode: String, day: Long) = "$mode|$day"
+
+    /** Midnight of [t]'s local date. */
+    fun dayStartOf(t: Long): Long = java.util.Calendar.getInstance().apply {
+        timeInMillis = t
+        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    /** Last [KEEP_DAYS] dates, newest first. */
+    fun archiveDays(): List<Long> {
+        val c = java.util.Calendar.getInstance().apply { timeInMillis = dayStartOf(System.currentTimeMillis()) }
+        return List(KEEP_DAYS) { i -> if (i > 0) c.add(java.util.Calendar.DAY_OF_MONTH, -1); c.timeInMillis }
+    }
+
+    /** A moment inside the [mode] period that starts on date [day]. */
+    private fun archNow(mode: String, day: Long): Long {
+        val inDay = day + (minutesOfHm(dayStart) ?: 360) * 60_000L + 60_000L
+        return when (mode) {
+            "day" -> inDay
+            "night" -> ReportBuilder.dayNightWindow("day", dayStart, dayEnd, inDay).let { it.second + 60_000L }
+            else -> day + (minutesOfHm(shiftStart) ?: 960) * 60_000L + 60_000L
+        }
+    }
+
+    private fun minutesOfHm(s: String): Int? {
+        val p = s.split(":"); val h = p.getOrNull(0)?.toIntOrNull() ?: return null
+        return h * 60 + (p.getOrNull(1)?.toIntOrNull() ?: 0)
+    }
+
+    fun archiveWindow(mode: String, day: Long): Pair<Long, Long> {
+        val now = archNow(mode, day)
+        return if (mode == "shift") ReportBuilder.shiftBounds(now, shiftStart)
+        else ReportBuilder.dayNightWindow(mode, dayStart, dayEnd, now).let { w ->
+            if (mode == "night" && w.first > now) Pair(w.first - DAY, w.second - DAY) else w
+        }
+    }
+
+    fun archiveFlights(mode: String, day: Long): List<Flight> {
+        dataRev
+        val (a, b) = archiveWindow(mode, day)
+        return flights.filter { it.t in a until b }.sortedBy { it.t }
+    }
+
+    /** Auto-built report of a past period (counters that aren't stored per day start at 0). */
+    fun archiveAuto(mode: String, day: Long): String {
+        dataRev
+        return ReportBuilder.build(
+            ReportInput(
+                mode = mode, name = name, leader = leader,
+                flights = flights.toList(), events = events.toList(), templates = templates.toList(),
+                fields = fields.toList(),
+                dayCfg = DayCfg(props = dayCfg.props.map { it.copy(qty = 0) }.toMutableList(), drones = dayCfg.drones.toMutableList()),
+                shiftStart = shiftStart, dayStart = dayStart, shiftCode = shiftCode, sortieCount = "",
+                scoutAuto = scoutAuto, showAir = showAir, showCountShift = showCountShift,
+                now = archNow(mode, day), curRec = null, activeRec = null, flying = false, startTs = 0L,
+                dayEnd = dayEnd, shiftDetailed = shiftDetailed,
+            ),
+        )
+    }
+
+    /** Shown text: auto, or the manual edit with later data changes merged in. */
+    fun archiveText(mode: String, day: Long): String {
+        val auto = archiveAuto(mode, day)
+        val e = archEdits[archKey(mode, day)] ?: return auto
+        return Merge3.merge(e.base, e.text, auto)
+    }
+
+    fun editArchive(mode: String, day: Long, text: String) {
+        archEdits[archKey(mode, day)] = ArchEdit(archiveAuto(mode, day), text)
+        saveArchEdits()
+    }
+
+    fun resetArchive(mode: String, day: Long) {
+        archEdits.remove(archKey(mode, day)); saveArchEdits()
+    }
+
+    private fun saveArchEdits() {
+        val cutoff = System.currentTimeMillis() - (KEEP_DAYS + 1) * DAY
+        archEdits.keys.filter { (it.substringAfter('|').toLongOrNull() ?: 0L) < cutoff }.forEach { archEdits.remove(it) }
+        store.putString("kap_arch_edits", store.json.encodeToString(
+            kotlinx.serialization.builtins.MapSerializer(String.serializer(), ArchEdit.serializer()), archEdits.toMap()))
+    }
+
+    /** Single-flight report («Зараз» format) for the archive: saved edit or auto. */
+    fun flightReport(f: Flight): String {
+        f.rep?.takeIf { it.isNotEmpty() }?.let { return it }
+        return ReportBuilder.build(
+            ReportInput(
+                mode = "current", name = name, leader = leader,
+                flights = flights.toList(), events = events.toList(), templates = templates.toList(),
+                fields = fields.toList(), dayCfg = dayCfg, shiftStart = shiftStart, dayStart = dayStart,
+                shiftCode = shiftCode, sortieCount = sortieCount, scoutAuto = scoutAuto, showAir = showAir,
+                showCountShift = showCountShift, now = System.currentTimeMillis(), curRec = f.copy(rep = null),
+                activeRec = activeRec(), flying = flying, startTs = startTs, dayEnd = dayEnd, shiftDetailed = shiftDetailed,
+            ),
+        )
+    }
+
     /** Rebuilds the preview unless the user edited it ([force] discards manual edits). */
     fun updatePreview(force: Boolean) {
         if (previewEdited && !force) return
         if (force) previewEdited = false
         val text = buildReport()
+        previewBase = buildReport(stripRep = true)
         if (previewText == text) return
         previewText = text
+    }
+
+    /**
+     * Data changed (locally or from another device): refresh the preview. Manual edits are kept —
+     * only the parts the data changed are carried into the edited text (3-way line merge).
+     */
+    fun syncPreview() {
+        if (!previewEdited) { updatePreview(false); return }
+        val auto = buildReport(stripRep = true)
+        if (mode == "current") {
+            val rec = curRec()
+            val rep = rec?.rep
+            if (rec == null || rep.isNullOrEmpty()) { previewEdited = false; updatePreview(false); return }
+            val base = repBase[rec.t] ?: return
+            val merged = Merge3.merge(base, rep, auto)
+            repBase[rec.t] = auto
+            if (merged != rep) {
+                val i = flights.indexOfFirst { it.t == rec.t }
+                if (i >= 0) flights[i] = flights[i].copy(rep = merged)
+                saveFlights()
+            }
+            previewText = merged
+            return
+        }
+        if (previewBase.isEmpty()) return
+        previewText = Merge3.merge(previewBase, previewText, auto)
+        previewBase = auto
     }
 
     fun refreshPreviewNow() {
@@ -487,7 +634,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     fun afterData() {
         bump()
-        if (!previewEdited) updatePreview(false)
+        syncPreview()
     }
 
     private fun fireAutoSend() {
@@ -654,6 +801,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val i = flights.indexOfFirst { it.t == t }
         if (i >= 0) flights[i] = flights[i].copy(rep = rep)
         saveFlights()
+        emit(Op.SetFlightRep(t, rep))
     }
 
     fun insertTemplate(text: String) {
@@ -1110,7 +1258,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun setDayLost(n: Int) {
         dayCfg = dayCfg.copy(lost = n)
         saveDayCfg()
-        updatePreview(true)
+        syncPreview()
         emitDayCfg()
     }
 
@@ -1118,7 +1266,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun setDayDmg(n: Int) {
         dayCfg = dayCfg.copy(dmg = n)
         saveDayCfg()
-        updatePreview(true)
+        syncPreview()
         emitDayCfg()
     }
 
@@ -1128,7 +1276,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         list[index] = NamedQty(name ?: list[index].name, qty ?: list[index].qty)
         dayCfg = dayCfg.copy(props = list)
         saveDayCfg()
-        updatePreview(true)
+        syncPreview()
         emitDayCfg()
     }
 
@@ -1138,7 +1286,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         list[index] = NamedQty(name ?: list[index].name, qty ?: list[index].qty)
         dayCfg = dayCfg.copy(drones = list)
         saveDayCfg()
-        updatePreview(true)
+        syncPreview()
         emitDayCfg()
     }
 
@@ -1161,7 +1309,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val list = dayCfg.props.toMutableList()
         if (index !in list.indices) return
         list.removeAt(index)
-        dayCfg = dayCfg.copy(props = list); saveDayCfg(); updatePreview(true); emitDayCfg()
+        dayCfg = dayCfg.copy(props = list); saveDayCfg(); syncPreview(); emitDayCfg()
     }
 
     // TODO(decomp): inlined at UI call site (EditorKt lambda 36, cases 2/3).
@@ -1169,7 +1317,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val list = dayCfg.drones.toMutableList()
         if (index !in list.indices) return
         list.removeAt(index)
-        dayCfg = dayCfg.copy(drones = list); saveDayCfg(); updatePreview(true); emitDayCfg()
+        dayCfg = dayCfg.copy(drones = list); saveDayCfg(); syncPreview(); emitDayCfg()
     }
 
     fun emitDayCfg() = emit(Op.SetDayCfg(dayCfg))
@@ -1191,35 +1339,35 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun changeShiftStart(v: String) {
         shiftStart = v
         store.putString("kap_shiftstart", v)
-        updatePreview(true)
+        syncPreview()
         emit(Op.SetShiftStart(v))
     }
 
     fun changeDayStart(v: String) {
         dayStart = v
         store.putString("kap_daystart", v)
-        updatePreview(true)
+        syncPreview()
         emit(Op.SetDayStart(v))
     }
 
     fun changeDayEnd(v: String) {
         dayEnd = v
         store.putString("kap_dayend", v)
-        updatePreview(true)
+        syncPreview()
         emit(Op.SetDayEnd(v))
     }
 
     fun changeShiftCode(v: String) {
         shiftCode = v
         store.putString("kap_shiftcode", v)
-        updatePreview(true)
+        syncPreview()
         emit(Op.SetShiftCode(v))
     }
 
     fun changeSortieCount(v: String) {
         sortieCount = v
         store.putString("kap_sorties", v)
-        updatePreview(true)
+        syncPreview()
         emit(Op.SetSortieCount(v))
     }
 
@@ -1228,14 +1376,15 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun changeScoutAuto(v: Boolean) {
         scoutAuto = v
         store.putBool("kap_scout", v)
-        updatePreview(true)
+        syncPreview()
         emit(Op.SetScoutAuto(v))
     }
 
     fun changeMode(v: String) {
+        val changed = mode != v
         mode = v
         store.putString("kap_reportmode", v)
-        afterData()
+        if (changed) { previewEdited = false; bump(); updatePreview(true) } else afterData()
     }
 
     fun changeThemeMode(v: String) {
@@ -1246,7 +1395,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun changeShowAir(v: Boolean) {
         showAir = v
         store.putBool("kap_showair", v)
-        updatePreview(true)
+        syncPreview()
     }
 
     fun changeBigEdit(v: Boolean) {
@@ -1257,13 +1406,13 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun changeShowCountShift(v: Boolean) {
         showCountShift = v
         store.putBool("kap_countshift", v)
-        updatePreview(true)
+        syncPreview()
     }
 
     fun changeShiftDetailed(v: Boolean) {
         shiftDetailed = v
         store.putBool("kap_shiftdetail", v)
-        updatePreview(true)
+        syncPreview()
     }
 
     fun changeAutoSend(v: Boolean) {
@@ -1314,6 +1463,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         previewEdited = true
         if (mode == "current") {
             val rec = curRec() ?: return
+            if (rec.t !in repBase) repBase[rec.t] = previewBase.ifEmpty { buildReport(stripRep = true) }
             val i = flights.indexOfFirst { it.t == rec.t }
             if (i >= 0) flights[i] = flights[i].copy(rep = text)
             saveFlights()
@@ -1412,9 +1562,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     // ==== persistence =========================================================================
 
-    /** Persists flights, dropping those older than 8 days. */
+    /** Persists flights, dropping those older than KEEP_DAYS. */
     fun saveFlights() {
-        val cutoff = System.currentTimeMillis() - 8 * DAY
+        val cutoff = System.currentTimeMillis() - KEEP_DAYS * DAY
         val kept = flights.filter { it.t >= cutoff }
         if (kept.size != flights.size) {
             flights.clear()
@@ -1424,9 +1574,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         bump()
     }
 
-    /** Persists events, dropping those older than 8 days. */
+    /** Persists events, dropping those older than KEEP_DAYS. */
     fun saveEvents() {
-        val cutoff = System.currentTimeMillis() - 8 * DAY
+        val cutoff = System.currentTimeMillis() - KEEP_DAYS * DAY
         val kept = events.filter { it.t >= cutoff }
         if (kept.size != events.size) {
             events.clear()
@@ -1631,7 +1781,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             activeRecT = flights.firstOrNull { it.lt == null }?.t
             store.putStringNow("kap_flights", store.json.encodeToString(flightsSer, flights.toList()))
             bump()
-            if (!previewEdited) updatePreview(false)
+            syncPreview()
             applyingRemote = false
             syncFlyingState()
         } finally {
@@ -1699,7 +1849,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             store.putStringNow("kap_points", json.encodeToString(ListSerializer(Point.serializer()), points.toList()))
             store.putStringNow("kap_fields", json.encodeToString(ListSerializer(Field.serializer()), fields.toList()))
             bump()
-            if (!previewEdited) updatePreview(false)
+            syncPreview()
         } finally {
             applyingRemote = false
         }
@@ -1707,6 +1857,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         const val HUB_PORT = 8777
+        /** Flights/events are kept this long (report archive). */
+        const val KEEP_DAYS = 21
         private val flightsSer = ListSerializer(Flight.serializer())
         private val eventsSer = ListSerializer(Event.serializer())
 
