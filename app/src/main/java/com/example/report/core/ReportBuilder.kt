@@ -399,7 +399,7 @@ object ReportBuilder {
         val props = cfg.props.filter { it.name.isNotEmpty() }
             .ifEmpty { listOf(NamedQty("Тип А"), NamedQty("Тип Б")) }
         out += "${i + 2}. Витрачено пропелерів - " + props.joinToString(",") { "${it.name} - ${it.qty} шт" }
-        val drones = cfg.drones.filter { it.name.isNotEmpty() }
+        val drones = (input.posDrones ?: cfg.drones).filter { it.name.isNotEmpty() && it.qty > 0 }
         out += "${i + 3}. Дронів на позиції " +
             if (drones.isNotEmpty()) drones.joinToString(", ") { "\"${it.name}\" ${it.qty} шт" } else "- 0 шт"
         out += POS_BG

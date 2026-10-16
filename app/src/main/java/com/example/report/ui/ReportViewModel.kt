@@ -62,8 +62,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         /** Drone number (from the QR list or typed). */
         val serial: String = "",
         val surname: String = "",
-        /** «Дронів на позиції» type this loss was subtracted from ("" = none). */
-        val decName: String = "",
+        /** t of the "lost" drone-list entry created for this loss (position count source). */
+        val lostT: Long = 0L,
     )
 
     val store = Store(application)
@@ -460,6 +460,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 startTs = startTs,
                 dayEnd = dayEnd,
                 shiftDetailed = shiftDetailed,
+                posDrones = reportPosDrones(),
             ),
         )
     }
@@ -532,7 +533,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 shiftStart = shiftStart, dayStart = dayStart, shiftCode = shiftCode, sortieCount = "",
                 scoutAuto = scoutAuto, showAir = showAir, showCountShift = showCountShift,
                 now = archNow(mode, day), curRec = null, activeRec = null, flying = false, startTs = 0L,
-                dayEnd = dayEnd, shiftDetailed = shiftDetailed,
+                dayEnd = dayEnd, shiftDetailed = shiftDetailed, posDrones = reportPosDrones(),
             ),
         )
     }
@@ -962,10 +963,12 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val drone = store.sp.getString("kap_loss_drone", "") ?: ""
         val surname = store.sp.getString("kap_loss_surname", "") ?: ""
         val model = drone.ifEmpty { droneModel }
-        val dec = takeDroneFromPosition(model)
-        lossDraft = LossDraft(rec.t, cause, at, coords, pilot, model, surname = surname, decName = dec)
-        setStatus("Втрату борту відмічено о " + TimeFmt.hm(at) + " · піде у звіт «День/Ніч» за часом втрати" +
-            (if (dec.isNotEmpty()) " · на позиції «$dec» −1" else ""), "err")
+        // lost drone leaves the position: a "lost" entry in the drone list (hidden from the tabs)
+        val lostT = maxOf(at, (droneIns.maxOfOrNull { it.t } ?: 0L) + 1)
+        droneIns.add(DroneIn(t = lostT, model = model, kind = DRONE_LOST))
+        saveDroneIns()
+        lossDraft = LossDraft(rec.t, cause, at, coords, pilot, model, surname = surname, lostT = lostT)
+        setStatus("Втрату борту відмічено о " + TimeFmt.hm(at) + " · піде у звіт «День/Ніч» за часом втрати · на позиції −1", "err")
     }
 
     /** Updates the loss draft; pilot/drone are remembered for next time. */
@@ -973,16 +976,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         coords: String? = null, pilot: String? = null, drone: String? = null,
         tail: String? = null, serial: String? = null, surname: String? = null,
     ) {
-        var d = lossDraft ?: return
-        // model changed to another «на позиції» type → move the subtraction there
-        if (drone != null && d.decName.isNotEmpty()) {
-            val target = positionTypeFor(drone)
-            if (target >= 0 && dayCfg.drones[target].name != d.decName) {
-                val old = dayCfg.drones.indexOfFirst { it.name == d.decName }
-                if (old >= 0) updateDrone(old, null, dayCfg.drones[old].qty + 1)
-                d = d.copy(decName = takeDroneFromPosition(drone))
-            }
-        }
+        val d = lossDraft ?: return
         if (pilot != null) store.putString("kap_loss_pilot", pilot)
         if (drone != null) store.putString("kap_loss_drone", drone)
         if (surname != null) store.putString("kap_loss_surname", surname)
@@ -990,32 +984,40 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             coords = coords ?: d.coords, pilot = pilot ?: d.pilot, drone = drone ?: d.drone,
             tail = tail?.filter { it.isDigit() }?.take(4) ?: d.tail, serial = serial ?: d.serial, surname = surname ?: d.surname,
         )
+        // keep the "lost" list entry in step with the loss screen (model / 4 digits / number)
+        val nd = lossDraft ?: return
+        val li = droneIns.indexOfFirst { it.t == nd.lostT && it.kind == DRONE_LOST }
+        if (li >= 0 && (drone != null || tail != null || serial != null)) {
+            droneIns[li] = droneIns[li].copy(model = nd.drone.trim(), tail = nd.tail, code = nd.serial.trim())
+            saveDroneIns()
+        }
     }
 
     /**
-     * «Дронів на позиції» type for a drone model: name match (either contains the other,
-     * case-insensitive), else the only listed type. -1 = none.
+     * «Дронів на позиції» from the drone list: every «Заїхав» entry minus «Переданий» and lost
+     * ones (matched by number, else 4 digits, else model). Grouped by model.
      */
-    private fun positionTypeFor(model: String): Int {
-        val list = dayCfg.drones
-        val m = model.trim().lowercase()
-        if (m.isNotEmpty()) {
-            val i = list.indexOfFirst { val n = it.name.trim().lowercase(); n.isNotEmpty() && (n.contains(m) || m.contains(n)) }
-            if (i >= 0) return i
-        }
-        val named = list.withIndex().filter { it.value.name.isNotBlank() }
-        return if (named.size == 1) named[0].index else -1
-    }
+    /** For reports: from the list once it has any «Заїхав» entry, else the manual editor rows. */
+    fun reportPosDrones(): List<NamedQty>? =
+        if (droneIns.any { it.kind == DRONE_IN }) positionDrones() else null
 
-    /** Lost drone leaves the position: −1 of its type. Returns the type name ("" if nothing). */
-    private fun takeDroneFromPosition(model: String): String {
-        val i = positionTypeFor(model)
-        if (i < 0) return ""
-        val q = dayCfg.drones[i]
-        if (q.qty <= 0) return ""
-        updateDrone(i, null, q.qty - 1)
-        setStatus("Дронів на позиції «${q.name}»: ${q.qty} → ${q.qty - 1}", "err")
-        return q.name
+    fun positionDrones(): List<NamedQty> {
+        dataRev
+        val ins = droneIns.filter { it.kind == DRONE_IN }.toMutableList()
+        val minus = droneIns.filter { it.kind == DRONE_OUT || it.kind == DRONE_LOST }.sortedBy { it.t }
+        val byModel = ArrayList<DroneIn>()
+        for (m in minus) {
+            val i = ins.indexOfFirst {
+                (m.code.isNotBlank() && it.code.equals(m.code.trim(), true)) ||
+                    (m.code.isBlank() && m.tail.isNotBlank() && it.tail == m.tail)
+            }
+            if (i >= 0) ins.removeAt(i) else byModel += m
+        }
+        for (m in byModel) {
+            val i = ins.indexOfLast { it.model.trim().equals(m.model.trim(), true) }
+            if (i >= 0) ins.removeAt(i)
+        }
+        return ins.groupBy { it.model.trim() }.map { (k, v) -> NamedQty(k, v.size) }
     }
 
     /** Flight + comment-line index of the "Втрата дрону" line (to attach map coordinates). */
@@ -1183,8 +1185,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     // ==== «Заїхав / Переданий дрон»: separate local lists + own reports =====================
 
+    /** Entries of a tab (cleared ones are hidden but still count for «Дронів на позиції»). */
     fun dronesOf(kind: String): List<IndexedValue<DroneIn>> =
-        droneIns.withIndex().filter { it.value.kind == kind }
+        droneIns.withIndex().filter { it.value.kind == kind && !it.value.cleared }
 
     /** Adds (index = -1) or replaces an entry; returns its 1-based number within its list. */
     fun saveDrone(index: Int, kind: String, model: String, tail: String, code: String): Int {
@@ -1197,18 +1200,14 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             kind = kind,
             pos = droneIns.getOrNull(index)?.pos ?: false,
         )
+        val before = positionDrones().sumOf { it.qty }
         val prev = droneIns.getOrNull(index)
         if (index in droneIns.indices) droneIns[index] = d else droneIns.add(d)
-        // «Дронів на позиції»: заїхав +1, переданий −1 (an edit first undoes the old entry's effect)
-        val notes = ArrayList<String>()
-        if (prev == null || prev.kind != d.kind || prev.model != d.model) {
-            if (prev != null) positionEffect(prev, undo = true)?.let { notes += it }
-            positionEffect(d, undo = false)?.let { notes += it }
-        }
-        val pos = if (notes.isEmpty()) "" else " · " + notes.joinToString(", ")
         droneModel = m
         store.putString("kap_drone_model", m)
         saveDroneIns()
+        val after = positionDrones().sumOf { it.qty }
+        val pos = if (after != before) " · на позиції: $before → $after" else ""
         val list = dronesOf(kind)
         val n = list.indexOfFirst { it.value === d } + 1
         val dup = d.code.isNotEmpty() && list.count { it.value.code == d.code } > 1
@@ -1226,36 +1225,21 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     fun removeDroneEntry(index: Int) {
         if (index !in droneIns.indices) return
-        val d = droneIns.removeAt(index); saveDroneIns()
-        positionEffect(d, undo = true) // removed by mistake → undo its effect on the position count
+        droneIns.removeAt(index); saveDroneIns()
     }
 
-    /** Applies (or undoes) a drone-list entry on «Дронів на позиції». Returns a note like "«M4T» +1". */
-    private fun positionEffect(d: DroneIn, undo: Boolean): String? {
-        val add = (d.kind != "out") != undo
-        val name = if (add) giveDroneToPosition(d.model, create = d.kind != "out") else takeDroneFromPosition(d.model)
-        return if (name.isEmpty()) null else "на позиції «$name» " + if (add) "+1" else "−1"
+    /**
+     * «Очистити»: the tab's list/report starts from №1 again; the drones still count for
+     * «Дронів на позиції». [full] also drops them from the position count.
+     */
+    fun clearDrones(kind: String, full: Boolean = false) {
+        if (full) droneIns.removeAll { it.kind == kind }
+        else for (i in droneIns.indices) if (droneIns[i].kind == kind) droneIns[i] = droneIns[i].copy(cleared = true)
+        saveDroneIns()
     }
 
-    /** +1 to the «Дронів на позиції» type of [model]. Returns the type name ("" if none). */
-    private fun giveDroneToPosition(model: String, create: Boolean = false): String {
-        val m = model.trim()
-        var i = if (create) {
-            // arriving drone: only a matching type (else a new type for this model)
-            dayCfg.drones.indexOfFirst { val n = it.name.trim().lowercase(); n.isNotEmpty() && m.isNotEmpty() && (n.contains(m.lowercase()) || m.lowercase().contains(n)) }
-        } else positionTypeFor(model)
-        if (i < 0 && create && m.isNotEmpty()) {
-            val empty = dayCfg.drones.indexOfFirst { it.name.isBlank() }
-            if (empty >= 0) { updateDrone(empty, m, 0); i = empty }
-            else { dayCfg = dayCfg.copy(drones = ArrayList(dayCfg.drones + NamedQty(m, 0))); i = dayCfg.drones.lastIndex }
-        }
-        if (i < 0) return ""
-        val q = dayCfg.drones[i]
-        updateDrone(i, null, q.qty + 1)
-        return q.name
-    }
-
-    fun clearDrones(kind: String) { droneIns.removeAll { it.kind == kind }; saveDroneIns() }
+    /** Resets the position count: drops every entry (incl. cleared / lost). */
+    fun resetPositionDrones() { droneIns.clear(); saveDroneIns() }
 
     private fun saveDroneIns(sync: Boolean = true) {
         store.putStringNow("kap_dronein", store.json.encodeToString(ListSerializer(DroneIn.serializer()), droneIns.toList()))

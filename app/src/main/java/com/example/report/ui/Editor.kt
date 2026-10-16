@@ -158,6 +158,15 @@ fun DayNightSummary(vm: ReportViewModel) {
     Spacer(Modifier.height(6.dp))
 
     ehead("ДРОНІВ НА ПОЗИЦІЇ")
+    val fromList = vm.reportPosDrones()
+    if (fromList != null) {
+        Text(
+            if (fromList.isEmpty()) "0 шт" else fromList.joinToString(", ") { "\"${it.name}\" ${it.qty} шт" },
+            color = cs.onSurface, fontSize = 14.sp,
+        )
+        Text("Рахується зі списку дронів: заїхали − передані − втрачені", color = cs.onSurfaceVariant, fontSize = 11.sp)
+        return
+    }
     vm.dayCfg.drones.forEachIndexed { i, d ->
         NamedQtyRow(
             d.name,

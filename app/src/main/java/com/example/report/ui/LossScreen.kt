@@ -72,7 +72,7 @@ fun LossScreen(
             text = {
                 var q by remember { mutableStateOf("") }
                 Column {
-                    val all = vm.droneIns.reversed()
+                    val all = vm.droneIns.filter { it.kind != DRONE_LOST }.reversed()
                     if (all.size > 5) OutlinedTextField(
                         value = q, onValueChange = { q = it },
                         modifier = Modifier.fillMaxWidth(),
@@ -261,7 +261,7 @@ fun LossScreen(
             HorizontalDivider(color = cs.outline)
             Text(
                 "Посадку відмічено · втрата піде у звіт «День/Ніч» за часом втрати" +
-                    (if (draft.decName.isNotEmpty()) " · «Дронів на позиції» ${draft.decName}: −1" else ""),
+                    " · «Дронів на позиції» −1",
                 Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 color = cs.onSurfaceVariant,
                 fontSize = 11.sp,

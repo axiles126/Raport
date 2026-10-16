@@ -15,4 +15,6 @@ data class DroneIn(
     val kind: String = "in",
     /** Marked as the one in use on the position (only a note — not in any report). */
     val pos: Boolean = false,
+    /** Hidden by «Очистити» (tab/report restart from №1) but still on the position. */
+    val cleared: Boolean = false,
 )

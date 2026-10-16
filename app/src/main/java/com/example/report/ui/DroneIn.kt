@@ -57,6 +57,8 @@ import com.journeyapps.barcodescanner.ScanOptions
 
 const val DRONE_IN = "in"
 const val DRONE_OUT = "out"
+/** Lost drone (from the loss screen) — hidden from the tabs, counts against «Дронів на позиції». */
+const val DRONE_LOST = "lost"
 
 /** Entry being added (index = -1) or edited. */
 data class DroneDraft(val index: Int, val kind: String, val model: String, val tail: String, val code: String)
@@ -155,7 +157,7 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
                 IconButton(onClick = close) { Icon(Icons.Filled.Close, "Закрити", tint = cs.onSurface) }
             }
             HorizontalDivider(color = cs.outline)
-            val onPos = vm.droneIns.filter { it.pos }
+            val onPos = vm.droneIns.filter { it.pos && !it.cleared && it.kind != DRONE_LOST }
             if (onPos.isNotEmpty()) Text(
                 "На позиції: " + onPos.joinToString(", ") { "${it.model} (${it.tail})" },
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -220,9 +222,19 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
     if (confirmClear) AlertDialog(
         onDismissRequest = { confirmClear = false },
         confirmButton = { TextButton(onClick = { vm.clearDrones(kind); confirmClear = false }) { Text("Очистити", color = ErrRed) } },
-        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Скасувати") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { vm.clearDrones(kind, full = true); confirmClear = false }) { Text("І з обліку", color = ErrRed) }
+                TextButton(onClick = { confirmClear = false }) { Text("Скасувати") }
+            }
+        },
         title = { Text("Очистити список?") },
-        text = { Text("Нумерація почнеться з №1.") },
+        text = {
+            Text(
+                "Нумерація почнеться з №1. Дрони лишаються в обліку «Дронів на позиції»." +
+                    "\n«І з обліку» — прибрати їх і з підрахунку позиції.",
+            )
+        },
     )
     if (removeAt >= 0) AlertDialog(
         onDismissRequest = { removeAt = -1 },

@@ -29,4 +29,6 @@ data class ReportInput(
     val startTs: Long,
     val dayEnd: String,
     val shiftDetailed: Boolean,
+    /** «Дронів на позиції» computed from the drone list (null = use dayCfg.drones). */
+    val posDrones: List<com.example.report.data.NamedQty>? = null,
 )
