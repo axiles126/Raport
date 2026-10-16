@@ -54,7 +54,13 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val at: Long,
         val coords: String,
         val pilot: String,
+        /** Drone model (e.g. "Matrice 4T"). */
         val drone: String,
+        /** 4 digits shown in brackets. */
+        val tail: String = "",
+        /** Drone number (from the QR list or typed). */
+        val serial: String = "",
+        val surname: String = "",
     )
 
     val store = Store(application)
@@ -790,17 +796,25 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 .lastOrNull { Coords.isCoord(it) } ?: ""
         }
         val pilot = (store.sp.getString("kap_loss_pilot", "") ?: "").ifEmpty { leader }
-        val drone = store.sp.getString("kap_loss_drone", "3МБ") ?: "3МБ"
-        lossDraft = LossDraft(rec.t, cause, at, coords, pilot, drone)
+        val drone = store.sp.getString("kap_loss_drone", "") ?: ""
+        val surname = store.sp.getString("kap_loss_surname", "") ?: ""
+        lossDraft = LossDraft(rec.t, cause, at, coords, pilot, drone.ifEmpty { droneModel }, surname = surname)
         setStatus("Втрату борту відмічено о " + TimeFmt.hm(at) + " · піде у звіт «День/Ніч» за часом втрати", "err")
     }
 
     /** Updates the loss draft; pilot/drone are remembered for next time. */
-    fun updateLoss(coords: String? = null, pilot: String? = null, drone: String? = null) {
+    fun updateLoss(
+        coords: String? = null, pilot: String? = null, drone: String? = null,
+        tail: String? = null, serial: String? = null, surname: String? = null,
+    ) {
         val d = lossDraft ?: return
         if (pilot != null) store.putString("kap_loss_pilot", pilot)
         if (drone != null) store.putString("kap_loss_drone", drone)
-        lossDraft = d.copy(coords = coords ?: d.coords, pilot = pilot ?: d.pilot, drone = drone ?: d.drone)
+        if (surname != null) store.putString("kap_loss_surname", surname)
+        lossDraft = d.copy(
+            coords = coords ?: d.coords, pilot = pilot ?: d.pilot, drone = drone ?: d.drone,
+            tail = tail?.filter { it.isDigit() }?.take(4) ?: d.tail, serial = serial ?: d.serial, surname = surname ?: d.surname,
+        )
     }
 
     /** Flight + comment-line index of the "Втрата дрону" line (to attach map coordinates). */
@@ -823,7 +837,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             append(".\nОрієнтовні координати: ")
             append(d.coords.trim().ifEmpty { "—" })
             append("\nПілот: ").append(d.pilot.trim())
+            if (d.surname.isNotBlank()) append("\nПрізвище пілота: ").append(d.surname.trim())
             append("\nДрон: ").append(d.drone.trim())
+            if (d.tail.isNotBlank() || d.serial.isNotBlank()) append(" (").append(d.tail.ifEmpty { "    " }).append(") ").append(d.serial.trim())
         }
     }
 

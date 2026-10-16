@@ -1,4 +1,15 @@
 package com.example.report.ui
+import com.example.report.ui.theme.OkGreen
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.QrCodeScanner
+import com.journeyapps.barcodescanner.ScanContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -54,6 +65,27 @@ fun LossScreen(
 ) {
     val draft = vm.lossDraft ?: return
     val cs = MaterialTheme.colorScheme
+    var pickDrone by remember { mutableStateOf(false) }
+    val lossScan = rememberLauncherForActivityResult(ScanContract()) { r -> r.contents?.let { vm.updateLoss(serial = it.trim()) } }
+    if (pickDrone) {
+        AlertDialog(
+            onDismissRequest = { pickDrone = false },
+            title = { Text("Дрон зі списку") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    val all = vm.droneIns.reversed()
+                    if (all.isEmpty()) Text("Список «Заїхали / Передані» порожній.", color = cs.outline)
+                    for (d in all) TextButton(onClick = {
+                        vm.updateLoss(drone = d.model, tail = d.tail, serial = d.code); pickDrone = false
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text("${d.model} (${d.tail.ifEmpty { "    " }}) ${d.code}" + if (d.kind == DRONE_OUT) " · переданий" else "",
+                            color = cs.onSurface, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { pickDrone = false }) { Text("Закрити") } },
+        )
+    }
     BackHandler(onBack = close)
 
     Surface(Modifier.fillMaxSize(), color = cs.background) {
@@ -130,12 +162,49 @@ fun LossScreen(
                 )
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
+                    value = draft.surname,
+                    onValueChange = { vm.updateLoss(surname = it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Прізвище пілота") },
+                    singleLine = true,
+                )
+                Spacer(Modifier.height(6.dp))
+                // Drone: model (4 digits) number — from the «Заїхали/Передані» list, QR or typed
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("ДРОН", Modifier.weight(1f), color = cs.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { pickDrone = true }) { Text("Зі списку", color = OkGreen) }
+                }
+                OutlinedTextField(
                     value = draft.drone,
                     onValueChange = { vm.updateLoss(drone = it) },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Дрон") },
+                    label = { Text("Модель") },
                     singleLine = true,
                 )
+                Spacer(Modifier.height(6.dp))
+                Row {
+                    OutlinedTextField(
+                        value = draft.tail,
+                        onValueChange = { vm.updateLoss(tail = it) },
+                        modifier = Modifier.weight(0.38f),
+                        label = { Text("4 цифри") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    OutlinedTextField(
+                        value = draft.serial,
+                        onValueChange = { vm.updateLoss(serial = it) },
+                        modifier = Modifier.weight(0.62f),
+                        label = { Text("Номер") },
+                        singleLine = true,
+                        trailingIcon = {
+                            IconButton(onClick = { lossScan.launch(droneScanOptions()) }) {
+                                Icon(Icons.Filled.QrCodeScanner, "Сканувати QR", tint = cs.onSurface)
+                            }
+                        },
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
                 Text("ПОВІДОМЛЕННЯ", color = cs.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
