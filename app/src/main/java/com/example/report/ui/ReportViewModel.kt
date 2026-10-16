@@ -142,6 +142,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     /** «Заїхав дрон» scans in order (number = position + 1). Synced with the hub (SharedState.drones); not in shift reports. */
     val droneIns = mutableStateListOf<DroneIn>()
+    /** Report archive manual edits (see archiveText). */
+    val archEdits = androidx.compose.runtime.mutableStateMapOf<String, ArchEdit>()
     var droneModel by mutableStateOf("Matrice 4T")
 
     /** «Ураження» report draft + map coordinate target for it. */
@@ -460,7 +462,6 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     /** Manual edits of archived reports: key "mode|dayMidnight" → (auto base, edited text). */
     @kotlinx.serialization.Serializable
     data class ArchEdit(val base: String, val text: String)
-    val archEdits = androidx.compose.runtime.mutableStateMapOf<String, ArchEdit>()
 
     fun archKey(mode: String, day: Long) = "$mode|$day"
 
