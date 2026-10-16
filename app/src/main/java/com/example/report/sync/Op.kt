@@ -1,6 +1,8 @@
 package com.example.report.sync
 
 import com.example.report.data.DayCfg
+import com.example.report.data.DroneIn
+import com.example.report.data.Route
 import kotlinx.serialization.Serializable
 
 /**
@@ -144,4 +146,12 @@ sealed class Op {
 
     @Serializable
     data class ResetShift(val dummy: Int = 0) : Op()
+
+    // ---- map routes / drone list (whole-list replace; older versions ignore unknown ops) ----
+
+    @Serializable
+    data class SetRoutes(val routes: List<Route>) : Op()
+
+    @Serializable
+    data class SetDrones(val drones: List<DroneIn>) : Op()
 }

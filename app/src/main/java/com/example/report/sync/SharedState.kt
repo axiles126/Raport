@@ -5,6 +5,8 @@ import com.example.report.data.Event
 import com.example.report.data.Field
 import com.example.report.data.Flight
 import com.example.report.data.Point
+import com.example.report.data.Route
+import com.example.report.data.DroneIn
 import kotlinx.serialization.Serializable
 
 /**
@@ -30,4 +32,10 @@ data class SharedState(
     val scoutAuto: Boolean = true,
     val rev: Long = 0L,
     val dayEnd: String = "",
+    /** Map routes/areas (visibility is per device, not applied from remote). */
+    val routes: List<Route> = emptyList(),
+    /** «Заїхали / Передані» drone list. */
+    val drones: List<DroneIn> = emptyList(),
+    /** 2+ = sender syncs [routes]/[drones]; older senders omit them (must not wipe ours). */
+    val syncV: Int = 0,
 )

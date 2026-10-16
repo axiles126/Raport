@@ -139,7 +139,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     val templates = mutableStateListOf<String>()
     val events = mutableStateListOf<Event>()
 
-    /** «Заїхав дрон» scans in order (number = position + 1). Local only: not synced, not in shift reports. */
+    /** «Заїхав дрон» scans in order (number = position + 1). Synced with the hub (SharedState.drones); not in shift reports. */
     val droneIns = mutableStateListOf<DroneIn>()
     var droneModel by mutableStateOf("Matrice 4T")
 
@@ -405,6 +405,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         scoutAuto = scoutAuto,
         rev = dataRev.toLong(),
         dayEnd = dayEnd,
+        routes = routes.toList(),
+        drones = droneIns.toList(),
+        syncV = 2,
     )
 
     // ==== report ==============================================================================
@@ -895,8 +898,25 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     fun routeClear() { route.clear(); routeStrokes.clear(); routeEditId = null }
 
-    private fun saveRoutes() =
+    private fun saveRoutes(sync: Boolean = true) {
         store.putStringNow("kap_routes", store.json.encodeToString(ListSerializer(Route.serializer()), routes.toList()))
+        if (sync) emit(Op.SetRoutes(routes.toList()))
+    }
+
+    /** Remote route list: replaces ours, keeping this device's show/hide choice for known routes. */
+    private fun applyRemoteRoutes(remote: List<Route>) {
+        val vis = routes.associate { it.id to it.visible }
+        val next = remote.map { r -> r.copy(visible = vis[r.id] ?: true) }
+        if (next == routes.toList()) return
+        routes.clear(); routes.addAll(next)
+        saveRoutes(sync = false)
+    }
+
+    private fun applyRemoteDrones(remote: List<DroneIn>) {
+        if (remote == droneIns.toList()) return
+        droneIns.clear(); droneIns.addAll(remote)
+        saveDroneIns(sync = false)
+    }
 
     /** Saves the route being drawn (new or the one loaded for editing) and clears the drawing. */
     fun saveRoute(name: String, color: String) {
@@ -917,12 +937,12 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setRouteVisible(id: String, on: Boolean) {
         val i = routes.indexOfFirst { it.id == id }; if (i < 0) return
-        routes[i] = routes[i].copy(visible = on); saveRoutes()
+        routes[i] = routes[i].copy(visible = on); saveRoutes(sync = false)
     }
 
     fun setAllRoutesVisible(on: Boolean) {
         for (i in routes.indices) routes[i] = routes[i].copy(visible = on)
-        saveRoutes()
+        saveRoutes(sync = false)
     }
 
     fun deleteRoute(id: String) { routes.removeAll { it.id == id }; saveRoutes() }
@@ -999,8 +1019,10 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearDrones(kind: String) { droneIns.removeAll { it.kind == kind }; saveDroneIns() }
 
-    private fun saveDroneIns() =
+    private fun saveDroneIns(sync: Boolean = true) {
         store.putStringNow("kap_dronein", store.json.encodeToString(ListSerializer(DroneIn.serializer()), droneIns.toList()))
+        if (sync) emit(Op.SetDrones(droneIns.toList()))
+    }
 
     fun droneReportText(kind: String): String {
         val list = dronesOf(kind).map { it.value }
@@ -1578,6 +1600,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 is Op.SetSortieCount -> changeSortieCount(op.v)
                 is Op.SetScoutAuto -> changeScoutAuto(op.v)
                 is Op.ResetShift -> resetShift()
+                is Op.SetRoutes -> applyRemoteRoutes(op.routes)
+                is Op.SetDrones -> applyRemoteDrones(op.drones)
             }
         } finally {
             applyingRemote = false
@@ -1603,6 +1627,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             shiftCode = st.shiftCode
             sortieCount = st.sortieCount
             scoutAuto = st.scoutAuto
+            if (st.syncV >= 2) { applyRemoteRoutes(st.routes); applyRemoteDrones(st.drones) }
             activeRecT = flights.firstOrNull { it.lt == null }?.t
             store.putStringNow("kap_flights", store.json.encodeToString(flightsSer, flights.toList()))
             bump()
@@ -1649,6 +1674,18 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             for (f in st.fields) if (!fdMap.containsKey(f.id)) fdMap[f.id] = f
             fields.clear()
             fields.addAll(fdMap.values)
+
+            // routes / drones: union (client's own entries join the hub's list)
+            val rIds = routes.map { it.id }.toSet()
+            for (r in st.routes) if (r.id !in rIds) routes.add(r.copy(visible = true))
+            saveRoutes(sync = false)
+            val dKeys = droneIns.map { it.t to it.kind }.toSet()
+            val newD = st.drones.filter { (it.t to it.kind) !in dKeys }
+            if (newD.isNotEmpty()) {
+                val all = (droneIns + newD).sortedBy { it.t }
+                droneIns.clear(); droneIns.addAll(all)
+            }
+            saveDroneIns(sync = false)
 
             if (name.isEmpty()) name = st.name
             if (leader.isEmpty()) leader = st.leader
