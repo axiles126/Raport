@@ -262,6 +262,25 @@ fun RouteMenu(vm: ReportViewModel, r: Route, onShow: () -> Unit, onEdit: () -> U
 /** List of saved routes; tap opens [RouteMenu]. */
 @Composable
 fun RoutesList(vm: ReportViewModel, onPick: (Route) -> Unit, onDismiss: () -> Unit) {
+    var del by remember { mutableStateOf<Route?>(null) }
+    var delAll by remember { mutableStateOf(false) }
+    del?.let { d ->
+        AlertDialog(
+            onDismissRequest = { del = null },
+            title = { Text("Видалити «${d.name}»?") },
+            confirmButton = { TextButton(onClick = { vm.deleteRoute(d.id); del = null }) { Text("Видалити", color = ErrRed) } },
+            dismissButton = { TextButton(onClick = { del = null }) { Text("Скасувати") } },
+        )
+    }
+    if (delAll) AlertDialog(
+        onDismissRequest = { delAll = false },
+        title = { Text("Видалити всі маршрути й області?") },
+        text = { Text("На всіх синхронізованих пристроях теж.") },
+        confirmButton = {
+            TextButton(onClick = { vm.routes.map { it.id }.forEach { vm.deleteRoute(it) }; delAll = false }) { Text("Видалити всі", color = ErrRed) }
+        },
+        dismissButton = { TextButton(onClick = { delAll = false }) { Text("Скасувати") } },
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Маршрути та області") },
@@ -295,12 +314,18 @@ fun RoutesList(vm: ReportViewModel, onPick: (Route) -> Unit, onDismiss: () -> Un
                                 tint = if (r.visible) OkGreen else MaterialTheme.colorScheme.outline,
                             )
                         }
+                        androidx.compose.material3.IconButton(onClick = { del = r }) {
+                            androidx.compose.material3.Icon(
+                                androidx.compose.material.icons.Icons.Filled.Delete, "Видалити", tint = ErrRed,
+                            )
+                        }
                     }
                     HorizontalDivider()
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Закрити") } },
+        dismissButton = { if (vm.routes.isNotEmpty()) TextButton(onClick = { delAll = true }) { Text("Видалити всі", color = ErrRed) } },
     )
 }
 

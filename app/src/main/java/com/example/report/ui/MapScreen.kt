@@ -82,6 +82,7 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Polyline
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Gesture
@@ -304,14 +305,9 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             if (compassOn && heading != null) MapLabel("курс " + heading.toInt() + "°")
         }
 
-        Column(
-            Modifier
-                .align(Alignment.TopEnd)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(8.dp)
-                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-        ) {
-            MapIconBtn(Icons.Filled.Close, "Закрити", onClick = { close() })
+        val landscape = LocalConfiguration.current.screenWidthDp > LocalConfiguration.current.screenHeightDp
+        val btnClose: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Close, "Закрити", onClick = { close() }) }
+        val btnLoc: @Composable () -> Unit = {
             MapIconBtn(Icons.Filled.MyLocation, "Моє місце", onClick = {
                 val loc = lastKnownLocation(context)
                 if (loc == null) {
@@ -324,15 +320,57 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                     rev++
                 }
             })
-            MapIconBtn(Icons.Filled.Explore, "Компас", compassOn, onClick = { compassOn = !compassOn })
-            MapIconBtn(Icons.Filled.Edit, "Малювання", drawMode != 0, onClick = { showDrawMenu = true })
+        }
+        val btnCompass: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Explore, "Компас", compassOn, onClick = { compassOn = !compassOn }) }
+        val btnDraw: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Edit, "Малювання", drawMode != 0, onClick = { showDrawMenu = true }) }
+        val btnRoutes: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Layers, "Маршрути та області", onClick = { showRoutes = true }) }
+        val btnOffline: @Composable () -> Unit = {
             MapIconBtn(if (offline) Icons.Filled.CloudOff else Icons.Filled.Cloud, "Офлайн-карта", offline, onClick = { showOffline = true })
+        }
+        val btnClearPts: @Composable () -> Unit = {
             MapIconBtn(Icons.Filled.DeleteSweep, "Очистити точки", onClick = {
                 if (vm.points.isNotEmpty()) {
                     vm.clearPoints()
                     rev++
                 }
             })
+        }
+        val btnZoomIn: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Add, "Збільшити", onClick = { mapView.controller.zoomIn() }) }
+        val btnZoomOut: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Remove, "Зменшити", onClick = { mapView.controller.zoomOut() }) }
+
+        if (landscape) {
+            // landscape: two columns on the right so nothing is cut off; zoom at the bottom of the 2nd column
+            Row(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(4.dp),
+            ) {
+                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    btnDraw(); btnRoutes(); btnOffline(); btnClearPts()
+                }
+                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    btnClose(); btnLoc(); btnCompass(); btnZoomIn(); btnZoomOut()
+                }
+            }
+        } else {
+            Column(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(8.dp)
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            ) {
+                btnClose(); btnLoc(); btnCompass(); btnDraw(); btnRoutes(); btnOffline(); btnClearPts()
+            }
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(end = 8.dp, bottom = (screenH * 0.2f).dp),
+            ) {
+                btnZoomIn(); btnZoomOut()
+            }
         }
 
         if (vm.route.isNotEmpty()) {
@@ -348,15 +386,6 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             }
         }
 
-        Column(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(end = 8.dp, bottom = (screenH * 0.25f).dp),
-        ) {
-            MapIconBtn(Icons.Filled.Add, "Збільшити", onClick = { mapView.controller.zoomIn() })
-            MapIconBtn(Icons.Filled.Remove, "Зменшити", onClick = { mapView.controller.zoomOut() })
-        }
     }
 
     selPoint?.let { point ->
