@@ -62,7 +62,7 @@ python3 /tmp/hub.py & HUB=$!
 adb reverse tcp:8777 tcp:8777
 TAG=sync; PKG=io.github.axiles126.report
 adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 3
-{ tap "Меню"; sleep 2
+{ sleep 5; tap "Меню" | grep -q "^tap" || { sleep 5; tap "Меню"; }; sleep 2
   for i in 1 2 3 4 5; do tap "Синхронізація" | grep -q "^tap" && break; adb shell input swipe 120 560 120 160 300; sleep 1; done
   sleep 2; shot 1_net
   tap "IP хаба (напр. 192.168.0.5)"; sleep 1; adb shell input text 127.0.0.1; adb shell input keyevent 111; sleep 1
