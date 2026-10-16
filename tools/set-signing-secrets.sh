@@ -27,9 +27,8 @@ else
     keytool -genkeypair -keystore "$NEW" -storetype PKCS12 -alias $ALIAS -keyalg RSA -keysize 4096 \
       -validity 10000 -dname "CN=Report, O=Report, C=UA" -storepass "$SP" -keypass "$SP" >/dev/null
     printf '%s\n' "$SP" > "$DIR/password.txt"; chmod 600 "$DIR"/*
-    termux-setup-storage >/dev/null 2>&1 || true
-    mkdir -p /sdcard/Download/report-keys 2>/dev/null && cp "$NEW" "$DIR/password.txt" /sdcard/Download/report-keys/ 2>/dev/null \
-      && echo "Резервна копія: /sdcard/Download/report-keys/ — збережи її окремо (втрата = знову видаляти застосунок)."
+    # No copy to shared storage (/sdcard is readable by other apps). Back up $DIR to offline media yourself.
+    echo "Ключ лише в $DIR (приватна тека Termux). Збережи копію поза телефоном — втрата = знову видаляти застосунок."
     echo "Створено новий ключ: $NEW"
   else
     echo "Використовую вже створений ключ: $NEW"

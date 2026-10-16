@@ -87,7 +87,7 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
     fun startHub(code: String) {
         pairingCode = code
         server = embeddedServer(ServerCIO, port = PORT, host = "0.0.0.0") {
-            install(ServerWebSockets)
+            install(ServerWebSockets) { maxFrameSize = MAX_FRAME }
             routing {
                 webSocket("/sync") { handleHubSession() }
             }
@@ -96,6 +96,7 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
     }
 
     private suspend fun DefaultWebSocketServerSession.handleHubSession() {
+        if (hubSessions.size >= MAX_PEERS) { close(CloseReason(CloseReason.Codes.TRY_AGAIN_LATER, "full")); return }
         // Liveness: ping every 5 s, drop a client that does not answer within 12 s (Wi-Fi gone).
         pingIntervalMillis = PING_MS
         timeoutMillis = PING_TIMEOUT_MS
@@ -121,7 +122,8 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         val second = withTimeoutOrNull(HANDSHAKE_TIMEOUT_MS) { receiveText() }
         val msg = second?.let { chan.open(it) }?.let { runCatching { Proto.decode(it) }.getOrNull() }
         val hello = msg as? Msg.Hello
-        if (hello == null || NetUtil.normCode(hello.code) != NetUtil.normCode(pairingCode)) {
+        if (hello == null || !java.security.MessageDigest.isEqual(
+                NetUtil.normCode(hello.code).toByteArray(), NetUtil.normCode(pairingCode).toByteArray())) {
             send("X2:Невірний код")
             close(CloseReason(CloseReason.Codes.NORMAL, "bad code"))
             return
@@ -189,7 +191,7 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         stopClient()
         clientWantConnect = true
         connectedHost = host
-        val c = HttpClient(ClientCIO) { install(ClientWebSockets) }
+        val c = HttpClient(ClientCIO) { install(ClientWebSockets) { maxFrameSize = MAX_FRAME } }
         client = c
         clientJob = scope.launch {
             var firstTry = true
@@ -326,6 +328,9 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         private const val HANDSHAKE_TIMEOUT_MS = 10_000L
         private const val RECONNECT_DELAY_MS = 3_000L
         private const val PING_MS = 5_000L
+        /** Biggest legit frame is a snapshot (≈8 days of flights); caps memory a stranger on Wi-Fi can make us allocate. */
+        private const val MAX_FRAME = 8L * 1024 * 1024
+        private const val MAX_PEERS = 24
         private const val PING_TIMEOUT_MS = 12_000L
     }
 }

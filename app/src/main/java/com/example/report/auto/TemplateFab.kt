@@ -280,7 +280,9 @@ class TemplateFab(private val svc: PilotWatchService) {
             setHintTextColor(0xFF777777.toInt())
             setTextColor(0xFFFFFFFF.toInt()); textSize = 17f; typeface = mono
             isSingleLine = true
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
+                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
             setSelection(text.length)
         }
         root.addView(input, LinearLayout.LayoutParams(px(260), LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -341,7 +343,8 @@ class TemplateFab(private val svc: PilotWatchService) {
             for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
         }
         runCatching { svc.windows.forEach { w -> if (w.root?.packageName?.toString() == PilotWatchService.DJI_PKG) walk(w.root, 0) } }
-        if (texts.isEmpty()) runCatching { walk(svc.rootInActiveWindow, 0) }
+        // Never read other apps: only DJI Pilot 2 windows are inspected.
+        if (texts.isEmpty()) runCatching { svc.rootInActiveWindow?.takeIf { it.packageName?.toString() == PilotWatchService.DJI_PKG }?.let { walk(it, 0) } }
         val joined = texts.joinToString("  ")
         MGRS_ANY.find(joined)?.let { return Coords.fmtMGRS(it.value.uppercase().replace(Regex("\\s+"), "")) to "з DJI" }
         LATLNG.find(joined)?.let { m ->

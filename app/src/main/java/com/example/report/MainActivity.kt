@@ -110,6 +110,9 @@ class MainActivity : ComponentActivity() {
 
     private fun takeLoss(intent: Intent?) {
         val cause = intent?.getStringExtra("loss_cause") ?: return
+        // Only our own OverlayService may trigger a loss: MainActivity is exported (launcher), so any app could send this.
+        if (intent.getStringExtra("loss_tok") != FlightBridge.lossToken) { intent.removeExtra("loss_cause"); return }
+        if (cause !in com.example.report.core.Loss.CAUSES) return
         pendingLoss = cause to intent.getLongExtra("loss_at", System.currentTimeMillis())
         intent.removeExtra("loss_cause")
     }
@@ -252,7 +255,7 @@ private fun reportText(vm: ReportViewModel): String =
 
 private fun doCopy(context: Context, vm: ReportViewModel) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Звіт", reportText(vm)))
+    cm.setPrimaryClip(com.example.report.core.sensitiveClip(ClipData.newPlainText("Звіт", reportText(vm))))
     vm.setStatus("✓ Скопійовано", "ok")
 }
 
@@ -287,7 +290,7 @@ private fun openInApp(context: Context, pkg: String, text: String, phone: String
 private fun shareApk(context: Context, vm: ReportViewModel) {
     try {
         val src = File(context.applicationInfo.sourceDir)
-        val dst = File(context.cacheDir, "Report.apk")
+        val dst = File(File(context.cacheDir, "share").apply { mkdirs() }, "Report.apk")
         src.copyTo(dst, overwrite = true)
         val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", dst)
         val send = Intent(Intent.ACTION_SEND).apply {
@@ -337,6 +340,6 @@ private fun shareLoss(context: Context, vm: ReportViewModel) {
 
 private fun copyLoss(context: Context, vm: ReportViewModel) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Втрата борту", vm.lossMessage()))
+    cm.setPrimaryClip(com.example.report.core.sensitiveClip(ClipData.newPlainText("Втрата борту", vm.lossMessage())))
     vm.setStatus("✓ Скопійовано", "ok")
 }

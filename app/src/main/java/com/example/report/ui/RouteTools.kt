@@ -175,7 +175,7 @@ fun routeText(r: Route): String {
 
 fun copyRoute(context: Context, r: Route) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Маршрут", routeText(r)))
+    cm.setPrimaryClip(com.example.report.core.sensitiveClip(ClipData.newPlainText("Маршрут", routeText(r))))
 }
 
 fun shareRoute(context: Context, r: Route) {

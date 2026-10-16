@@ -135,7 +135,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
 
     val mapView = remember {
         Configuration.getInstance().load(context, context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
-        Configuration.getInstance().userAgentValue = context.packageName
+        Configuration.getInstance().userAgentValue = "Mozilla/5.0 (Linux; Android)" // don't announce the app id to the tile server
         MapView(context).apply {
             setTileSource(ArcGisSat)
             setMultiTouchControls(true)

@@ -30,6 +30,12 @@ jobs:
           set -o pipefail
           if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > $RUNNER_TEMP/release.jks; export RELEASE_KEYSTORE=$RUNNER_TEMP/release.jks; echo "signing: release key"; else echo "signing: debug key (no secrets)"; fi
           gradle :app:assembleDebug :app:assembleRelease --no-daemon 2>&1 | tee build.log
+      - name: dependency vulnerabilities (OSV)
+        if: always()
+        run: |
+          gradle :app:dependencies --configuration releaseRuntimeClasspath --no-daemon -q > deps.txt 2>/dev/null || true
+          python3 .github/osv.py deps.txt > osv.txt 2>&1 || echo "osv check failed" >> osv.txt
+          head -40 osv.txt
       - name: errors
         if: failure()
         run: |
@@ -62,6 +68,7 @@ jobs:
           grep -nE '^e: |^w: .*(unresolved|Unresolved)|error:|What went wrong|FAILURE' -A4 build.log > errors.txt || true
           cp $GITHUB_WORKSPACE/app/build/outputs/apk/debug/*.apk $GITHUB_WORKSPACE/app/build/outputs/apk/release/*.apk . 2>/dev/null || true
           mkdir -p smoke && cp $GITHUB_WORKSPACE/smoke/* smoke/ 2>/dev/null || true
+          cp $GITHUB_WORKSPACE/osv.txt . 2>/dev/null || true
           echo "${{ github.sha }} ${{ job.status }}" > STATUS
           for a in *.apk; do $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner verify --print-certs "$a" 2>/dev/null | grep -m2 -E "DN|SHA-256" | sed "s#^#$a: #" >> STATUS; done
           git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "ci ${{ github.sha }}"

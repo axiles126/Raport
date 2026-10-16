@@ -89,10 +89,17 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     }
     init { runCatching { connMgr?.registerDefaultNetworkCallback(netCb) } }
 
+    /** Neutral mDNS name: no app name / phone model broadcast on the network. */
+    private fun hubServiceName(): String {
+        var id = store.sp.getString("kap_hubid", "") ?: ""
+        if (id.isEmpty()) { id = java.util.UUID.randomUUID().toString().take(4); store.putString("kap_hubid", id) }
+        return "hub-$id"
+    }
+
     private fun onNetworkBack() {
         when (netMode) {
             NetMode.CLIENT -> sync.reconnectNow()
-            NetMode.HUB -> nsd.register("Report-" + Build.MODEL, HUB_PORT)
+            NetMode.HUB -> nsd.register(hubServiceName(), HUB_PORT)
             else -> Unit
         }
     }
@@ -1439,7 +1446,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         // TODO(decomp): SyncManager.startHub (embeddedServer(CIO, port = 8777, host = "0.0.0.0")) is inlined here.
         sync.startHub(netCode)
         // TODO(decomp): NsdHelper.register is inlined here.
-        nsd.register("Report-" + Build.MODEL, HUB_PORT)
+        nsd.register(hubServiceName(), HUB_PORT)
         store.putString("kap_netmode", "hub")
         store.putStringNow("kap_netcode", netCode)
     }

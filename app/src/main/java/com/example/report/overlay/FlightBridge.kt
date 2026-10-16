@@ -36,6 +36,9 @@ object FlightBridge {
     @Volatile
     var uiResumed: Boolean = false
 
+    /** Per-process secret: MainActivity accepts a "loss_cause" intent only with this token (blocks other apps). */
+    val lossToken: String = java.util.UUID.randomUUID().toString()
+
     private val flightsSer = ListSerializer(Flight.serializer())
 
     private fun loadFlights(store: Store): MutableList<Flight> =
