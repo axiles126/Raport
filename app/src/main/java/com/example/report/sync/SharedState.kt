@@ -38,4 +38,6 @@ data class SharedState(
     val drones: List<DroneIn> = emptyList(),
     /** 2+ = sender syncs [routes]/[drones]; older senders omit them (must not wipe ours). */
     val syncV: Int = 0,
+    /** Deleted flights (takeoff ts) so a stale device can't bring them back. */
+    val deleted: List<Long> = emptyList(),
 )

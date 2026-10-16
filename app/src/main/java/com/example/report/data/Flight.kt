@@ -15,4 +15,6 @@ data class Flight(
     val mgrs: String = "",
     val x: Map<String, String> = LinkedHashMap(),
     val rep: String? = null,
+    /** Last-modified time (ms) — newer wins when devices merge. */
+    val u: Long = 0L,
 )

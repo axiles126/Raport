@@ -2,6 +2,7 @@ package com.example.report.sync
 
 import com.example.report.data.DayCfg
 import com.example.report.data.DroneIn
+import com.example.report.data.Flight
 import com.example.report.data.Route
 import kotlinx.serialization.Serializable
 
@@ -154,4 +155,8 @@ sealed class Op {
 
     @Serializable
     data class SetDrones(val drones: List<DroneIn>) : Op()
+
+    /** Whole flight from a client (newer [Flight.u] wins on the hub). */
+    @Serializable
+    data class UpsertFlight(val f: Flight) : Op()
 }

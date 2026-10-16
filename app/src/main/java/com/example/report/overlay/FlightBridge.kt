@@ -60,10 +60,11 @@ object FlightBridge {
         val store = Store(context)
         val flights = loadFlights(store)
         val active = flights.firstOrNull { it.lt == null }
+        val now = System.currentTimeMillis()
         if (active != null) {
-            flights[flights.indexOf(active)] = active.copy(lt = System.currentTimeMillis())
+            flights[flights.indexOf(active)] = active.copy(lt = now, u = now)
         } else {
-            flights.add(Flight(System.currentTimeMillis()))
+            flights.add(Flight(now, u = now))
         }
         saveFlights(store, flights)
     }
@@ -72,7 +73,17 @@ object FlightBridge {
     fun storeCancel(context: Context) {
         val store = Store(context)
         val flights = loadFlights(store)
-        if (flights.removeAll { it.lt == null }) saveFlights(store, flights)
+        val gone = flights.filter { it.lt == null }.map { it.t }
+        if (gone.isEmpty()) return
+        flights.removeAll { it.lt == null }
+        saveFlights(store, flights)
+        // tombstones so the hub's copy is dropped on the next sync
+        val ser = kotlinx.serialization.builtins.MapSerializer(
+            kotlinx.serialization.serializer<Long>(), kotlinx.serialization.serializer<Long>())
+        val del = store.load<Map<Long, Long>>("kap_flight_del", emptyMap()).toMutableMap()
+        val now = System.currentTimeMillis()
+        for (t in gone) del[t] = now
+        store.sp.edit().putString("kap_flight_del", store.json.encodeToString(ser, del)).apply()
     }
 
     /**
@@ -89,6 +100,7 @@ object FlightBridge {
             flights[idx] = f.copy(
                 c = Coords.addTemplateLine(now, f.c, text),
                 lt = if (Coords.isLand(text)) now else f.lt,
+                u = now,
             )
             saveFlights(store, flights)
         }
@@ -100,7 +112,7 @@ object FlightBridge {
         val flights = loadFlights(store)
         val idx = flights.indexOfFirst { it.lt == null }.takeIf { it >= 0 } ?: flights.indices.maxByOrNull { flights[it].t } ?: return
         val f = flights[idx]
-        flights[idx] = f.copy(c = attachToLastLine(f.c, mgrs) ?: f.c, mgrs = if (attachToLastLine(f.c, mgrs) == null) mgrs else f.mgrs)
+        flights[idx] = f.copy(c = attachToLastLine(f.c, mgrs) ?: f.c, mgrs = if (attachToLastLine(f.c, mgrs) == null) mgrs else f.mgrs, u = System.currentTimeMillis())
         saveFlights(store, flights)
     }
 

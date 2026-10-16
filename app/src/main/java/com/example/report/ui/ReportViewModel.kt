@@ -135,6 +135,12 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     /** True while applying ops/snapshots received from the network (suppresses re-emit). */
     private var applyingRemote = false
+    /** Applying remote flight data: keep the incoming [Flight.u] instead of stamping now. */
+    private var adoptingRemote = false
+    /** Flights as last persisted (without u) — to detect what changed. */
+    private var lastSaved: Map<Long, Flight> = emptyMap()
+    /** Deleted flights: takeoff ts → deletion time. */
+    private val deletedT = HashMap<Long, Long>()
 
     // ---- shift data --------------------------------------------------------------------------
 
@@ -244,6 +250,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     init {
         val sp = store.sp
         flights.addAll(store.load<List<Flight>>("kap_flights", emptyList()).map { normFlight(it) })
+        deletedT.putAll(store.load<Map<Long, Long>>("kap_flight_del", emptyMap()))
+        lastSaved = flights.associate { it.t to it.copy(u = 0L) }
         templates.addAll(store.load<List<String>>("kap_templates", emptyList()))
         events.addAll(store.load<List<Event>>("kap_events", emptyList()))
         fields.addAll(store.load<List<Field>>("kap_fields", emptyList()))
@@ -417,7 +425,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         dayEnd = dayEnd,
         routes = routes.toList(),
         drones = droneIns.toList(),
-        syncV = 2,
+        syncV = 3,
+        deleted = deletedT.keys.toList(),
     )
 
     // ==== report ==============================================================================
@@ -664,7 +673,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             setStatus("Зайнято — вже є активний виліт", "err")
             return
         }
-        onSendOp?.invoke(Op.Takeoff(System.currentTimeMillis()))
+        doTakeoff(System.currentTimeMillis()) // sent to the hub as UpsertFlight
     }
 
     /** @param autoSend fire the configured auto-send after landing. */
@@ -676,7 +685,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             if (autoSend) fireAutoSend()
             return
         }
-        onSendOp?.invoke(Op.Landing(null))
+        doLanding() // sent to the hub as UpsertFlight
         if (wasActive && autoSend) fireAutoSend()
     }
 
@@ -702,10 +711,6 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Closes a stuck active flight with zero duration (landing = takeoff). */
     fun forceResetActive() {
-        if (netMode == NetMode.CLIENT) {
-            onSendOp?.invoke(Op.ForceReset())
-            return
-        }
         flights.firstOrNull { it.lt == null }?.let { f ->
             updateFlight(f.t) { it.copy(lt = f.t) }
             saveFlights()
@@ -1611,8 +1616,59 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             flights.clear()
             flights.addAll(kept)
         }
+        trackFlightChanges(cutoff)
         store.putStringNow("kap_flights", store.json.encodeToString(flightsSer, flights.toList()))
         bump()
+    }
+
+    /**
+     * Stamps changed flights with u = now, records deletions, and on a client sends every
+     * changed flight to the hub as a whole (UpsertFlight) — so edits from any device converge.
+     */
+    private fun trackFlightChanges(cutoff: Long) {
+        val now = System.currentTimeMillis()
+        val changed = ArrayList<Flight>()
+        for (i in flights.indices) {
+            val f = flights[i]
+            val old = lastSaved[f.t]
+            if (old == null || old != f.copy(u = 0L)) {
+                if (!adoptingRemote) flights[i] = f.copy(u = maxOf(now, f.u))
+                changed += flights[i]
+            }
+        }
+        val ids = flights.map { it.t }.toSet()
+        val gone = lastSaved.keys.filter { it !in ids && it >= cutoff }
+        if (!adoptingRemote) for (t in gone) deletedT[t] = now
+        if (gone.isNotEmpty() || deletedT.keys.any { it < cutoff }) {
+            deletedT.keys.removeAll { it < cutoff }
+            store.putString("kap_flight_del", store.json.encodeToString(
+                kotlinx.serialization.builtins.MapSerializer(Long.serializer(), Long.serializer()), deletedT.toMap()))
+        }
+        lastSaved = flights.associate { it.t to it.copy(u = 0L) }
+        if (netMode == NetMode.CLIENT && !applyingRemote && !adoptingRemote) {
+            for (t in gone) onSendOp?.invoke(Op.DeleteFlight(t))
+            for (f in changed) onSendOp?.invoke(Op.UpsertFlight(f))
+        }
+    }
+
+    /** Hub: a client's whole flight — newer wins; a second open flight is refused (busy). */
+    private fun applyUpsert(f0: Flight) {
+        val f = normFlight(f0)
+        if (deletedT.containsKey(f.t)) return
+        val i = flights.indexOfFirst { it.t == f.t }
+        if (i < 0) {
+            if (f.lt == null && flights.any { it.lt == null }) return
+            val pos = flights.indexOfFirst { it.t > f.t }.let { if (it < 0) flights.size else it }
+            flights.add(pos, f)
+        } else {
+            if (f.u < flights[i].u || f == flights[i]) return
+            flights[i] = f
+        }
+        adoptingRemote = true
+        try { saveFlights() } finally { adoptingRemote = false }
+        activeRecT = flights.firstOrNull { it.lt == null }?.t
+        syncFlyingState()
+        afterData()
     }
 
     /** Persists events, dropping those older than KEEP_DAYS. */
@@ -1662,8 +1718,16 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         when (netMode) {
             NetMode.SOLO -> Unit
             NetMode.HUB -> onBroadcast?.invoke()
-            NetMode.CLIENT -> onSendOp?.invoke(op)
+            NetMode.CLIENT -> if (!isFlightOp(op)) onSendOp?.invoke(op)
         }
+    }
+
+    /** Flight edits — a client sends them as whole flights (see trackFlightChanges). */
+    private fun isFlightOp(op: Op) = when (op) {
+        is Op.Takeoff, is Op.Landing, is Op.ForceReset, is Op.AddFlight, is Op.DeleteFlight,
+        is Op.SetFlightTakeoff, is Op.SetFlightLanding, is Op.SetFlightComment, is Op.SetFlightField,
+        is Op.SetFlightRep, is Op.InsertTemplate, is Op.AttachCoordsToFlight, is Op.AttachCoordsToLine -> true
+        else -> false
     }
 
     /**
@@ -1791,6 +1855,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 is Op.SetSortieCount -> changeSortieCount(op.v)
                 is Op.SetScoutAuto -> changeScoutAuto(op.v)
                 is Op.ResetShift -> resetShift()
+                is Op.UpsertFlight -> applyUpsert(op.f)
                 is Op.SetRoutes -> applyRemoteRoutes(op.routes)
                 is Op.SetDrones -> applyRemoteDrones(op.drones)
             }
@@ -1803,8 +1868,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     private fun applySnapshot(st: SharedState) {
         applyingRemote = true
         try {
-            flights.clear()
-            flights.addAll(st.flights.map { normFlight(it) })
+            val resend = mergeSnapshotFlights(st)
             events.clear(); events.addAll(st.events)
             templates.clear(); templates.addAll(st.templates)
             fields.clear(); fields.addAll(st.fields)
@@ -1825,9 +1889,45 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             syncPreview()
             applyingRemote = false
             syncFlyingState()
+            // our newer / not-yet-received edits go (again) to the hub
+            for (f in resend) onSendOp?.invoke(Op.UpsertFlight(f))
         } finally {
             applyingRemote = false
         }
+    }
+
+    /**
+     * Client: hub's flights, except where ours is newer (edit whose send was lost / not yet
+     * applied) or ours is missing on the hub — those are kept and returned for re-sending.
+     */
+    private fun mergeSnapshotFlights(st: SharedState): List<Flight> {
+        val now = System.currentTimeMillis()
+        val remote = st.flights.map { normFlight(it) }
+        val resend = ArrayList<Flight>()
+        val out: List<Flight>
+        if (st.syncV < 3) {
+            out = remote // older hub: hub is authoritative
+        } else {
+            for (t in st.deleted) deletedT.putIfAbsent(t, now)
+            val rMap = remote.filter { !deletedT.containsKey(it.t) }.associateBy { it.t }
+            val merged = LinkedHashMap(rMap)
+            val hubActive = rMap.values.any { it.lt == null }
+            for (lf in flights) {
+                if (deletedT.containsKey(lf.t)) continue
+                val rf = rMap[lf.t]
+                if (rf == null) {
+                    if (lf.lt != null || !hubActive) { merged[lf.t] = lf; resend += lf }
+                } else if (lf.u > rf.u) {
+                    merged[lf.t] = lf; resend += lf
+                }
+            }
+            out = merged.values.sortedBy { it.t }
+        }
+        flights.clear()
+        flights.addAll(out)
+        adoptingRemote = true
+        try { saveFlights() } finally { adoptingRemote = false }
+        return resend
     }
 
     /**
@@ -1837,17 +1937,25 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     private fun mergeState(st: SharedState) {
         applyingRemote = true
         try {
+            val now = System.currentTimeMillis()
+            for (t in st.deleted) deletedT.putIfAbsent(t, now)
             val fMap = LinkedHashMap(flights.associateBy { it.t })
             for (rf in st.flights) {
+                if (deletedT.containsKey(rf.t)) continue
                 val mine = fMap[rf.t]
                 if (mine == null) {
                     fMap[rf.t] = normFlight(rf)
+                } else if (rf.u > mine.u) {
+                    fMap[rf.t] = normFlight(rf) // edited later on the client
                 } else if (mine.lt == null && rf.lt != null) {
                     fMap[rf.t] = mine.copy(lt = rf.lt)
                 }
             }
+            for (t in deletedT.keys) fMap.remove(t)
             flights.clear()
             flights.addAll(fMap.values.sortedBy { it.t })
+            adoptingRemote = true
+            try { saveFlights() } finally { adoptingRemote = false }
 
             for (t in st.templates) if (!templates.contains(t)) templates.add(t)
 
