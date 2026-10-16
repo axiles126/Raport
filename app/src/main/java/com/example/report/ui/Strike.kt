@@ -32,6 +32,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import com.example.report.core.Coords
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -52,6 +57,7 @@ fun StrikeScreen(vm: ReportViewModel, openMap: () -> Unit, close: () -> Unit) {
     LaunchedEffect(Unit) { if (vm.strike.t == 0L) vm.newStrike() }
     val s = vm.strike
     fun upd(f: (StrikeDraft) -> StrikeDraft) = vm.updateStrike(f)
+    var pickFromFlight by remember { mutableStateOf(false) }
 
     Surface(Modifier.fillMaxSize(), color = cs.background) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
@@ -76,7 +82,10 @@ fun StrikeScreen(vm: ReportViewModel, openMap: () -> Unit, close: () -> Unit) {
                 }
                 Field("Екіпаж", s.crew, vm.name.uppercase()) { v -> upd { it.copy(crew = v) } }
                 Field("Позиція", s.pos, vm.name.uppercase()) { v -> upd { it.copy(pos = v) } }
-                Field("Ціль", s.target) { v -> upd { it.copy(target = v) } }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { Field("Ціль", s.target) { v -> upd { it.copy(target = v) } } }
+                    TextButton(onClick = { pickFromFlight = true }) { Text("З вильоту", color = OkGreen, maxLines = 1, softWrap = false) }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { Field("Координати", s.coords) { v -> upd { it.copy(coords = v) } } }
                     TextButton(onClick = { vm.strikeCoordTarget = true; openMap() }) {
@@ -92,6 +101,9 @@ fun StrikeScreen(vm: ReportViewModel, openMap: () -> Unit, close: () -> Unit) {
                 Text(vm.strikeText(), fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = cs.onSurfaceVariant)
             }
             HorizontalDivider(color = cs.outline)
+            if (pickFromFlight) FlightTargetPicker(vm, { t, m ->
+                upd { it.copy(target = t, coords = m.ifEmpty { it.coords }) }; pickFromFlight = false
+            }) { pickFromFlight = false }
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { shareStrike(context, vm.strikeText()) }) {
                     Icon(Icons.Filled.Share, null, tint = OkGreen)
@@ -100,6 +112,41 @@ fun StrikeScreen(vm: ReportViewModel, openMap: () -> Unit, close: () -> Unit) {
             }
         }
     }
+}
+
+/** Lines of the active (or last) flight: target text + its coordinates, newest first. */
+private fun flightTargets(vm: ReportViewModel): List<Pair<String, String>> {
+    val rec = vm.activeRec() ?: vm.flights.maxByOrNull { it.t } ?: return emptyList()
+    return rec.c.split("\n").mapNotNull { raw ->
+        val noTime = Coords.TIME_RE.replace(raw.trim(), "")
+        if (noTime.isEmpty() || Coords.isCoord(noTime) || Coords.isLand(noTime)) return@mapNotNull null
+        val mgrs = Regex("за координатами\\s*(.+)$", RegexOption.IGNORE_CASE).find(noTime)?.groupValues?.get(1)?.trim() ?: ""
+        val text = Coords.COUNT_RE.replace(Coords.COORD_RE.replace(noTime, ""), "").trim()
+        if (text.equals("загальна розвідка", true)) null else text to mgrs.ifEmpty { rec.mgrs }
+    }.reversed()
+}
+
+@Composable
+private fun FlightTargetPicker(vm: ReportViewModel, onPick: (String, String) -> Unit, onDismiss: () -> Unit) {
+    val items = flightTargets(vm)
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ціль з вильоту") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (items.isEmpty()) Text("У вильоті ще немає відміток.", color = MaterialTheme.colorScheme.outline)
+                for ((t, m) in items) {
+                    TextButton(onClick = { onPick(t, m) }, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(t, color = MaterialTheme.colorScheme.onSurface)
+                            Text(m.ifEmpty { "без координат" }, fontSize = 12.sp, color = if (m.isEmpty()) MaterialTheme.colorScheme.outline else OkGreen)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрити") } },
+    )
 }
 
 @Composable

@@ -97,7 +97,6 @@ object FlightBridge {
         val lines = ArrayList(c.split("\n"))
         val i = lines.indexOfLast { Coords.TIME_RE.replace(it.trim(), "").let { t -> t.isNotEmpty() && !Coords.isCoord(t) } }
         if (i < 0) return null
-        lines[i] = Coords.COORD_RE.replace(lines[i], "").trimEnd() + " за координатами " + mgrs
-        return lines.joinToString("\n")
+        return Coords.withCoords(lines, i, mgrs).joinToString("\n")
     }
 }

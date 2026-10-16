@@ -54,7 +54,8 @@ object Coords {
                     .trim()
                     .equals(add, ignoreCase = true)
             }
-            if (idx >= 0) {
+            // A repeat of a template that already got its own coordinates is a new target → new line.
+            if (idx >= 0 && !COORD_RE.containsMatchIn(lines[idx])) {
                 val existing = lines[idx]
                 val n = COUNT_RE.find(existing)?.groupValues?.get(1)?.toIntOrNull() ?: 1
                 lines[idx] = COUNT_RE.replace(existing, "").trimEnd() + " ×" + (n + 1)
@@ -63,5 +64,25 @@ object Coords {
         }
         if (!isCoord(add)) add = TimeFmt.hm(now) + " " + add
         return if (cur.isEmpty()) add else cur + "\n" + add
+    }
+
+    /**
+     * Attaches [mgrs] to comment line [idx]. If that line is a merged "×N" (N > 1) without coordinates,
+     * one occurrence is split off into its own line with these coordinates and the rest stays "×(N-1)" —
+     * so several targets of the same template each get their own coordinates.
+     */
+    fun withCoords(lines: List<String>, idx: Int, mgrs: String): List<String> {
+        if (idx !in lines.indices) return lines
+        val line = lines[idx]
+        val n = COUNT_RE.find(line)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+        val out = lines.toMutableList()
+        if (n > 1 && !COORD_RE.containsMatchIn(line)) {
+            val base = COUNT_RE.replace(line, "").trimEnd()
+            out[idx] = if (n - 1 > 1) "$base ×${n - 1}" else base
+            out.add(idx, "$base за координатами $mgrs") // split-off goes before the rest → chronological order
+        } else {
+            out[idx] = COORD_RE.replace(line, "").trimEnd() + " за координатами " + mgrs
+        }
+        return out
     }
 }

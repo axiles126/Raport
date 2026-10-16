@@ -681,10 +681,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     /** Replaces any "за координатами …" tail of comment line [lineIdx] with [mgrs]. */
     fun attachCoordsToLine(mgrs: String, lineIdx: Int) {
         val rec = activeRec() ?: flights.lastOrNull() ?: return
-        val lines = ArrayList(rec.c.split("\n"))
+        val lines = rec.c.split("\n")
         if (lineIdx < 0 || lineIdx >= lines.size) return
-        lines[lineIdx] = Coords.COORD_RE.replace(lines[lineIdx], "").trimEnd() + " за координатами " + mgrs
-        updateFlight(rec.t) { it.copy(c = lines.joinToString("\n")) }
+        updateFlight(rec.t) { it.copy(c = Coords.withCoords(lines, lineIdx, mgrs).joinToString("\n")) }
         saveFlights()
         afterData()
         emit(Op.AttachCoordsToLine(mgrs, lineIdx))
