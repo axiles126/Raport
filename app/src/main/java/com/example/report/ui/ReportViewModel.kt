@@ -1198,10 +1198,13 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         )
         val prev = droneIns.getOrNull(index)
         if (index in droneIns.indices) droneIns[index] = d else droneIns.add(d)
-        // «Переданий» drone leaves the position: −1 in «Дронів на позиції» (and back if un-marked)
-        var pos = ""
-        if (kind == "out" && prev?.kind != "out") pos = takeDroneFromPosition(m).let { if (it.isNotEmpty()) " · на позиції «$it» −1" else "" }
-        else if (kind != "out" && prev?.kind == "out") pos = giveDroneToPosition(prev.model).let { if (it.isNotEmpty()) " · на позиції «$it» +1" else "" }
+        // «Дронів на позиції»: заїхав +1, переданий −1 (an edit first undoes the old entry's effect)
+        val notes = ArrayList<String>()
+        if (prev == null || prev.kind != d.kind || prev.model != d.model) {
+            if (prev != null) positionEffect(prev, undo = true)?.let { notes += it }
+            positionEffect(d, undo = false)?.let { notes += it }
+        }
+        val pos = if (notes.isEmpty()) "" else " · " + notes.joinToString(", ")
         droneModel = m
         store.putString("kap_drone_model", m)
         saveDroneIns()
@@ -1216,12 +1219,28 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun removeDroneEntry(index: Int) {
         if (index !in droneIns.indices) return
         val d = droneIns.removeAt(index); saveDroneIns()
-        if (d.kind == "out") giveDroneToPosition(d.model) // removed by mistake → back on position
+        positionEffect(d, undo = true) // removed by mistake → undo its effect on the position count
+    }
+
+    /** Applies (or undoes) a drone-list entry on «Дронів на позиції». Returns a note like "«M4T» +1". */
+    private fun positionEffect(d: DroneIn, undo: Boolean): String? {
+        val add = (d.kind != "out") != undo
+        val name = if (add) giveDroneToPosition(d.model, create = d.kind != "out") else takeDroneFromPosition(d.model)
+        return if (name.isEmpty()) null else "на позиції «$name» " + if (add) "+1" else "−1"
     }
 
     /** +1 to the «Дронів на позиції» type of [model]. Returns the type name ("" if none). */
-    private fun giveDroneToPosition(model: String): String {
-        val i = positionTypeFor(model)
+    private fun giveDroneToPosition(model: String, create: Boolean = false): String {
+        val m = model.trim()
+        var i = if (create) {
+            // arriving drone: only a matching type (else a new type for this model)
+            dayCfg.drones.indexOfFirst { val n = it.name.trim().lowercase(); n.isNotEmpty() && m.isNotEmpty() && (n.contains(m.lowercase()) || m.lowercase().contains(n)) }
+        } else positionTypeFor(model)
+        if (i < 0 && create && m.isNotEmpty()) {
+            val empty = dayCfg.drones.indexOfFirst { it.name.isBlank() }
+            if (empty >= 0) { updateDrone(empty, m, 0); i = empty }
+            else { dayCfg = dayCfg.copy(drones = ArrayList(dayCfg.drones + NamedQty(m, 0))); i = dayCfg.drones.lastIndex }
+        }
         if (i < 0) return ""
         val q = dayCfg.drones[i]
         updateDrone(i, null, q.qty + 1)
