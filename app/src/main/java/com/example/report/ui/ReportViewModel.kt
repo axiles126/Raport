@@ -141,6 +141,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     private var lastSaved: Map<Long, Flight> = emptyMap()
     /** Deleted flights: takeoff ts → deletion time. */
     private val deletedT = HashMap<Long, Long>()
+    /** Client: [Flight.u] of each flight in the last hub snapshot (to tell whether the hub changed it since). */
+    private val hubU = HashMap<Long, Long>()
 
     // ---- shift data --------------------------------------------------------------------------
 
@@ -1651,7 +1653,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** Hub: a client's whole flight — newer wins; a second open flight is refused (busy). */
+    /** Hub: a client's whole flight replaces ours; a second open flight is refused (busy). */
     private fun applyUpsert(f0: Flight) {
         val f = normFlight(f0)
         if (deletedT.containsKey(f.t)) return
@@ -1661,7 +1663,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             val pos = flights.indexOfFirst { it.t > f.t }.let { if (it < 0) flights.size else it }
             flights.add(pos, f)
         } else {
-            if (f.u < flights[i].u || f == flights[i]) return
+            if (f == flights[i]) return
             flights[i] = f
         }
         adoptingRemote = true
@@ -1897,8 +1899,10 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Client: hub's flights, except where ours is newer (edit whose send was lost / not yet
-     * applied) or ours is missing on the hub — those are kept and returned for re-sending.
+     * Client: the hub is the master — its flights replace ours. Kept from ours (and re-sent):
+     * a flight edited here while the link was down, if the hub hasn't changed it since; a flight
+     * the hub doesn't have yet (taken off / added offline), unless the hub already has another
+     * active one. So the local timer keeps running through a link loss.
      */
     private fun mergeSnapshotFlights(st: SharedState): List<Flight> {
         val now = System.currentTimeMillis()
@@ -1917,11 +1921,13 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 val rf = rMap[lf.t]
                 if (rf == null) {
                     if (lf.lt != null || !hubActive) { merged[lf.t] = lf; resend += lf }
-                } else if (lf.u > rf.u) {
-                    merged[lf.t] = lf; resend += lf
+                } else if (lf.u > rf.u && hubU[lf.t] == rf.u) {
+                    merged[lf.t] = lf; resend += lf // offline edit, hub copy untouched
                 }
             }
             out = merged.values.sortedBy { it.t }
+            hubU.clear()
+            for (f in rMap.values) hubU[f.t] = f.u
         }
         flights.clear()
         flights.addAll(out)
@@ -1945,8 +1951,6 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 val mine = fMap[rf.t]
                 if (mine == null) {
                     fMap[rf.t] = normFlight(rf)
-                } else if (rf.u > mine.u) {
-                    fMap[rf.t] = normFlight(rf) // edited later on the client
                 } else if (mine.lt == null && rf.lt != null) {
                     fMap[rf.t] = mine.copy(lt = rf.lt)
                 }
