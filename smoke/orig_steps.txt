@@ -1,0 +1,23 @@
+tap 'ВЗЛІТ ПІШОВ' @ 160 226
+tap 'СІВ' @ 160 226
+tap 'Доба' @ 217 425
+tap 'Налаштування' @ 292 52
+tap 'Меню' @ 28 52
+NOT FOUND 'Інструкція'
+NOT FOUND 'Ураження'
+NOT FOUND 'Карта'
+NOT FOUND 'Малювання'
+NOT FOUND '▢'
+NOT FOUND 'Зберегти маршрут'
+NOT FOUND 'Зберегти'
+NOT FOUND 'Малювання'
+NOT FOUND '☰'
+NOT FOUND 'ДРОН'
+NOT FOUND 'Заїхав дрон'
+NOT FOUND 'ДРОН'
+NOT FOUND 'Списки / вручну / поділитися'
+NOT FOUND 'Вручну'
+NOT FOUND '4 цифри (в дужках)'
+NOT FOUND 'Номер (QR або вручну)'
+NOT FOUND 'Зберегти'
+NOT FOUND 'ПОДІЛИТИСЯ'

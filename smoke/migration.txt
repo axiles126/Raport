@@ -1,0 +1,25 @@
+Performing Incremental Install
+Performing Streamed Install
+adb: failed to install /tmp/prev.apk: 
+Exception occurred while executing 'install':
+java.lang.IllegalArgumentException: Size must be positive
+	at com.android.server.pm.PackageManagerShellCommand.makeInstallParams(PackageManagerShellCommand.java:3475)
+	at com.android.server.pm.PackageManagerShellCommand.runInstall(PackageManagerShellCommand.java:1561)
+	at com.android.server.pm.PackageManagerShellCommand.onCommand(PackageManagerShellCommand.java:245)
+	at com.android.modules.utils.BasicShellCommandHandler.exec(BasicShellCommandHandler.java:97)
+	at android.os.ShellCommand.exec(ShellCommand.java:38)
+	at com.android.server.pm.PackageManagerService$IPackageManagerImpl.onShellCommand(PackageManagerService.java:6561)
+	at android.os.Binder.shellCommand(Binder.java:1230)
+	at android.os.Binder.onTransact(Binder.java:1043)
+	at android.content.pm.IPackageManager$Stub.onTransact(IPackageManager.java:4620)
+	at com.android.server.pm.PackageManagerService$IPackageManagerImpl.onTransact(PackageManagerService.java:6545)
+	at android.os.Binder.execTransactInternal(Binder.java:1505)
+	at android.os.Binder.execTransact(Binder.java:1444)
+
+stat: '/data/data/io.github.axiles126.report': No such file or directory
+/tmp/kapibara.xml: 1 file pushed, 0 skipped. 1.4 MB/s (94 bytes in 0.000s)
+chown: Need 2 arguments (see "chown --help")
+Performing Streamed Install
+Success
+kapibara_enc.xml
+0
