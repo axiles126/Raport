@@ -6,7 +6,8 @@ package com.example.report.core
  * Regions the user changed win; regions only the data changed are updated.
  */
 object Merge3 {
-    fun merge(base: String, mine: String, theirs: String): String {
+    /** [countAware]: the same line changed on both sides only in its "×N" → counts are added up. */
+    fun merge(base: String, mine: String, theirs: String, countAware: Boolean = false): String {
         if (base == theirs) return mine
         if (base == mine) return theirs
         val b = base.split("\n")
@@ -26,7 +27,9 @@ object Merge3 {
             val cb = b.subList(pb, nb)
             val cm = m.subList(pm, nm)
             val ct = t.subList(pt, nt)
+            val summed = if (countAware) sumCounts(cb, cm, ct) else null
             when {
+                summed != null -> out += summed
                 cm == cb -> out.addAll(ct)
                 ct == cb -> out.addAll(cm)
                 cm == ct -> out.addAll(cm)
@@ -38,6 +41,42 @@ object Merge3 {
             i++
         }
         return out.joinToString("\n")
+    }
+
+    /**
+     * Flight edited on two devices from the same [base]: each field takes the side that changed it;
+     * the comment is merged line by line (both sides' new lines kept, "×N" counts added up).
+     */
+    fun mergeFlight(base: com.example.report.data.Flight?, hub: com.example.report.data.Flight, cli: com.example.report.data.Flight): com.example.report.data.Flight {
+        val b = base ?: hub.copy(c = "", lt = null, mgrs = "", x = emptyMap(), rep = null)
+        fun <T> pick(bv: T, hv: T, cv: T): T = if (cv != bv) cv else hv
+        val x = LinkedHashMap(hub.x)
+        for (k in (b.x.keys + cli.x.keys)) {
+            val bv = b.x[k]; val cv = cli.x[k]
+            if (cv != bv) { if (cv == null) x.remove(k) else x[k] = cv }
+        }
+        return hub.copy(
+            c = merge(b.c, hub.c, cli.c, countAware = true),
+            lt = if (base == null) (cli.lt ?: hub.lt) else pick(b.lt, hub.lt, cli.lt),
+            mgrs = if (base == null) cli.mgrs.ifEmpty { hub.mgrs } else pick(b.mgrs, hub.mgrs, cli.mgrs),
+            rep = pick(b.rep, hub.rep, cli.rep),
+            x = x,
+            u = maxOf(hub.u, cli.u),
+        )
+    }
+
+    private val CNT = Regex("\\s*[×xX](\\d+)\\s*$")
+    private fun cnt(s: String) = CNT.find(s)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+    private fun bare(s: String) = CNT.replace(s, "").trimEnd()
+
+    /** One line each side, same text apart from "×N", both sides changed it → base + both increments. */
+    private fun sumCounts(b: List<String>, m: List<String>, t: List<String>): String? {
+        if (b.size != 1 || m.size != 1 || t.size != 1) return null
+        if (m[0] == b[0] || t[0] == b[0]) return null
+        val k = bare(b[0])
+        if (bare(m[0]) != k || bare(t[0]) != k) return null
+        val n = cnt(m[0]) + cnt(t[0]) - cnt(b[0])
+        return if (n > 1) "$k ×$n" else k
     }
 
     /** For each line of [a]: index of the matching line in [c] by LCS, or -1. */

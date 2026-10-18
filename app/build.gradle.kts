@@ -17,8 +17,8 @@ android {
         applicationId = "io.github.axiles126.report"
         minSdk = 29
         targetSdk = 37
-        versionCode = 36
-        versionName = "4.5"
+        versionCode = 37
+        versionName = "4.6"
     }
 
     signingConfigs {
@@ -54,6 +54,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     // AndroidX (exact versions from META-INF/*.version)
     implementation("androidx.core:core-ktx:1.19.0")
     implementation("androidx.activity:activity-compose:1.13.0")

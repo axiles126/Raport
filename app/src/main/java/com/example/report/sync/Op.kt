@@ -158,5 +158,5 @@ sealed class Op {
 
     /** Whole flight from a client (newer [Flight.u] wins on the hub). */
     @Serializable
-    data class UpsertFlight(val f: Flight) : Op()
+    data class UpsertFlight(val f: Flight, val base: Flight? = null) : Op()
 }

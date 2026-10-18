@@ -143,6 +143,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     private val deletedT = HashMap<Long, Long>()
     /** Client: [Flight.u] of each flight in the last hub snapshot (to tell whether the hub changed it since). */
     private val hubU = HashMap<Long, Long>()
+    /** Client: each flight as in the last hub snapshot — the base sent with an edit for a 3-way merge. */
+    private val hubFlights = HashMap<Long, Flight>()
 
     // ---- shift data --------------------------------------------------------------------------
 
@@ -1675,12 +1677,15 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         lastSaved = flights.associate { it.t to it.copy(u = 0L) }
         if (netMode == NetMode.CLIENT && !applyingRemote && !adoptingRemote) {
             for (t in gone) onSendOp?.invoke(Op.DeleteFlight(t))
-            for (f in changed) onSendOp?.invoke(Op.UpsertFlight(f))
+            for (f in changed) {
+                onSendOp?.invoke(Op.UpsertFlight(f, hubFlights[f.t]))
+                hubFlights[f.t] = f // next quick edit is based on this one (until the hub's snapshot arrives)
+            }
         }
     }
 
     /** Hub: a client's whole flight replaces ours; a second open flight is refused (busy). */
-    private fun applyUpsert(f0: Flight) {
+    private fun applyUpsert(f0: Flight, base: Flight? = null) {
         val f = normFlight(f0)
         if (deletedT.containsKey(f.t)) return
         val i = flights.indexOfFirst { it.t == f.t }
@@ -1690,7 +1695,10 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             flights.add(pos, f)
         } else {
             if (f == flights[i]) return
-            flights[i] = f
+            // merge with what changed here meanwhile (e.g. a template added on another device)
+            val merged = Merge3.mergeFlight(base, flights[i], f)
+            if (merged == flights[i]) return
+            flights[i] = merged
         }
         adoptingRemote = true
         try { saveFlights() } finally { adoptingRemote = false }
@@ -1883,7 +1891,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 is Op.SetSortieCount -> changeSortieCount(op.v)
                 is Op.SetScoutAuto -> changeScoutAuto(op.v)
                 is Op.ResetShift -> resetShift()
-                is Op.UpsertFlight -> applyUpsert(op.f)
+                is Op.UpsertFlight -> applyUpsert(op.f, op.base)
                 is Op.SetRoutes -> applyRemoteRoutes(op.routes)
                 is Op.SetDrones -> applyRemoteDrones(op.drones)
             }
@@ -1918,7 +1926,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             applyingRemote = false
             syncFlyingState()
             // our newer / not-yet-received edits go (again) to the hub
-            for (f in resend) onSendOp?.invoke(Op.UpsertFlight(f))
+            for (f in resend) onSendOp?.invoke(Op.UpsertFlight(f, hubFlights[f.t]))
         } finally {
             applyingRemote = false
         }
@@ -1954,6 +1962,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             out = merged.values.sortedBy { it.t }
             hubU.clear()
             for (f in rMap.values) hubU[f.t] = f.u
+            hubFlights.clear()
+            for (f in rMap.values) hubFlights[f.t] = f
         }
         flights.clear()
         flights.addAll(out)
