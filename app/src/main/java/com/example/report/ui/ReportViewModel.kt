@@ -733,6 +733,20 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         emit(Op.AddFlight())
     }
 
+    /** Archive: adds a finished flight [t]..[lt] (e.g. one forgotten earlier). */
+    fun addFlightAt(t0: Long, lt: Long?, comment: String = "") {
+        var t = t0
+        while (flights.any { it.t == t } || deletedT.containsKey(t)) t++
+        val l = lt?.let { if (it <= t) it + DAY else it } ?: (t + 60_000L)
+        flights.add(Flight(t, comment.trim(), l))
+        val sorted = flights.sortedBy { it.t }
+        flights.clear(); flights.addAll(sorted)
+        saveFlights()
+        afterData()
+        emit(Op.AddFlight())
+        setStatus("✓ Виліт " + TimeFmt.hm(t) + " додано", "ok")
+    }
+
     fun deleteFlight(t: Long) {
         flights.removeAll { it.t == t }
         if (curRecT == t) curRecT = null

@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -64,6 +65,7 @@ private val ARCH_MODES = listOf("day" to "ДЕНЬ", "night" to "НІЧ", "shift
  * shows the report built from that period's sorties (editable, edits kept) and the sorties
  * themselves — each can be fixed or sent as its own report.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
     val cs = MaterialTheme.colorScheme
@@ -73,6 +75,8 @@ fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
     var day by remember { mutableStateOf(days.first()) }
     var mode by remember { mutableStateOf(if (vm.mode in listOf("day", "night", "shift")) vm.mode else "day") }
     var flightRep by remember { mutableStateOf<Flight?>(null) }
+    var pickDate by remember { mutableStateOf(false) }
+    var addFlight by remember { mutableStateOf(false) }
 
     val text = vm.archiveText(mode, day)
     val edited = vm.archEdits.containsKey(vm.archKey(mode, day))
@@ -85,6 +89,9 @@ fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("АРХІВ ЗВІТІВ", Modifier.weight(1f), color = cs.onSurfaceVariant, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                IconButton(onClick = { pickDate = true }) {
+                    Icon(Icons.Filled.CalendarMonth, "Календар", tint = cs.onSurface)
+                }
                 if (edited) IconButton(onClick = { vm.resetArchive(mode, day) }) {
                     Icon(Icons.Filled.Refresh, "Повернути автоматичний", tint = cs.onSurface)
                 }
@@ -132,6 +139,10 @@ fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
 
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(title, color = cs.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Правте вильоти нижче (час, коментар, координати) — звіт перерахується сам.",
+                    color = cs.onSurfaceVariant, fontSize = 11.sp,
+                )
                 Spacer(Modifier.height(4.dp))
                 Surface(color = cs.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
                     BasicTextField(
@@ -164,9 +175,66 @@ fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
                     }
                     RecordRow(vm, f)
                 }
+                TextButton(onClick = { addFlight = true }) { Text("+ ДОДАТИ ВИЛІТ У ЦЕЙ ПЕРІОД", color = OkGreen, fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+
+    if (pickDate) {
+        val oldest = days.last()
+        val st = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = localToUtcDay(day),
+            selectableDates = object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val d = utcDayToLocal(utcTimeMillis)
+                    return d >= oldest && d <= days.first()
+                }
+            },
+        )
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { pickDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    st.selectedDateMillis?.let { day = utcDayToLocal(it) }
+                    pickDate = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { pickDate = false }) { Text("Скасувати") } },
+        ) { androidx.compose.material3.DatePicker(state = st, showModeToggle = false) }
+    }
+
+    if (addFlight) {
+        val (a, _) = vm.archiveWindow(mode, day)
+        var t1 by remember { mutableStateOf("") }
+        var t2 by remember { mutableStateOf("") }
+        var c by remember { mutableStateOf("") }
+        val hm = Regex("^\\d{1,2}:\\d{2}$")
+        AlertDialog(
+            onDismissRequest = { addFlight = false },
+            title = { Text("Виліт · $title") },
+            text = {
+                Column {
+                    Row {
+                        OutlinedTextField(t1, { t1 = it }, Modifier.weight(1f), label = { Text("Взліт ГГ:ХХ") }, singleLine = true)
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedTextField(t2, { t2 = it }, Modifier.weight(1f), label = { Text("Посадка") }, singleLine = true)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(c, { c = it }, Modifier.fillMaxWidth().heightIn(min = 90.dp), label = { Text("Коментар (напр. Ураження FPV)") })
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = hm.matches(t1.trim()), onClick = {
+                    var t = TimeFmt.tsFromTime(a, t1.trim())
+                    if (t < a) t += 86_400_000L // after midnight (night / доба)
+                    val lt = if (hm.matches(t2.trim())) TimeFmt.tsFromTime(t, t2.trim()) else null
+                    vm.addFlightAt(t, lt, c)
+                    addFlight = false
+                }) { Text("Додати") }
+            },
+            dismissButton = { TextButton(onClick = { addFlight = false }) { Text("Скасувати") } },
+        )
     }
 
     flightRep?.let { f0 ->
@@ -195,6 +263,21 @@ fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
             },
         )
     }
+}
+
+/** Local midnight → the DatePicker's UTC-midnight of the same calendar date, and back. */
+private fun localToUtcDay(local: Long): Long {
+    val c = java.util.Calendar.getInstance().apply { timeInMillis = local }
+    return java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+        clear(); set(c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH), c.get(java.util.Calendar.DAY_OF_MONTH))
+    }.timeInMillis
+}
+
+private fun utcDayToLocal(utc: Long): Long {
+    val u = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = utc }
+    return java.util.Calendar.getInstance().apply {
+        clear(); set(u.get(java.util.Calendar.YEAR), u.get(java.util.Calendar.MONTH), u.get(java.util.Calendar.DAY_OF_MONTH))
+    }.timeInMillis
 }
 
 private fun copyText(ctx: Context, vm: ReportViewModel, text: String) {
