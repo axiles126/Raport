@@ -1098,6 +1098,16 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         emit(Op.AddEvent(picked))
     }
 
+    /** Archive: an event in a past shift (starts at [t]; time is edited afterwards). */
+    fun addEventAt(t: Long) {
+        events.add(Event(t, null, "", ""))
+        saveEvents()
+        afterData()
+        emit(Op.AddEvent(""))
+        val e = events.last()
+        emit(Op.UpdateEvent(events.lastIndex, e.t, e.t2, e.text, e.mgrs)) // hub added it "now" → set its time
+    }
+
     // ==== map routes ========================================================================
 
     fun routeAdd(pts: List<Pair<Double, Double>>) {

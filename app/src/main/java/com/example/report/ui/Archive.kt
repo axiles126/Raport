@@ -161,6 +161,10 @@ fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
                     modifier = Modifier.padding(vertical = 4.dp),
                 )
 
+                if (mode == "shift") {
+                    Spacer(Modifier.height(8.dp))
+                    EventsEditor(vm, null, vm.archiveWindow("shift", day))
+                }
                 val list = vm.archiveFlights(mode, day)
                 Spacer(Modifier.height(8.dp))
                 Text("ВИЛЬОТИ (${list.size})", color = cs.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold)

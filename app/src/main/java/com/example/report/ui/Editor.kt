@@ -415,11 +415,12 @@ fun RecordRow(vm: ReportViewModel, flight: Flight) {
 
 /** «Доба»: events of the current shift (time range, description, MGRS picked from the map). */
 @Composable
-fun EventsEditor(vm: ReportViewModel, onOpenMap: () -> Unit) {
+fun EventsEditor(vm: ReportViewModel, onOpenMap: (() -> Unit)?, window: Pair<Long, Long>? = null) {
     val cs = MaterialTheme.colorScheme
     ehead("ПОДІЇ ЗМІНИ")
-    val shiftFrom = ReportBuilder.shiftBounds(System.currentTimeMillis(), vm.shiftStart).first
-    val (from, to) = ReportBuilder.shiftBounds(System.currentTimeMillis(), vm.shiftStart)
+    vm.dataRev
+    val (from, to) = window ?: ReportBuilder.shiftBounds(System.currentTimeMillis(), vm.shiftStart)
+    val shiftFrom = from
     val inShift = vm.events.withIndex()
         .filter { it.value.t in from until to }
         .map { it.index to it.value }
@@ -467,19 +468,19 @@ fun EventsEditor(vm: ReportViewModel, onOpenMap: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Координати (MGRS)") },
-                trailingIcon = {
+                trailingIcon = if (onOpenMap == null) null else ({
                     IconButton(onClick = {
                         vm.eventCoordTarget = i
                         onOpenMap()
                     }) {
                         Icon(Icons.Filled.Place, "З карти", tint = cs.onSurface)
                     }
-                },
+                }),
                 singleLine = true,
             )
         }
     }
-    TextButton(onClick = { vm.addEvent("") }) {
+    TextButton(onClick = { if (window == null) vm.addEvent("") else vm.addEventAt(from) }) {
         Text("+ Додати подію", color = cs.onSurfaceVariant)
     }
 }
