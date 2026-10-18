@@ -223,7 +223,7 @@ fun App(vm: ReportViewModel) {
             onOpenArchive = { showArchive = true },
         )
         if (showArchive) {
-            com.example.report.ui.ArchiveScreen(vm) { showArchive = false }
+            com.example.report.ui.ArchiveScreen(vm, { showMap = true }) { showArchive = false }
         }
         if (showStrike) {
             StrikeScreen(vm, { showMap = true }) { showStrike = false }

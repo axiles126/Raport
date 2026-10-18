@@ -67,7 +67,7 @@ private val ARCH_MODES = listOf("day" to "ДЕНЬ", "night" to "НІЧ", "shift
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
+fun ArchiveScreen(vm: ReportViewModel, openMap: (() -> Unit)? = null, close: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val ctx = LocalContext.current
     BackHandler(onBack = close)
@@ -163,7 +163,7 @@ fun ArchiveScreen(vm: ReportViewModel, close: () -> Unit) {
 
                 if (mode == "shift") {
                     Spacer(Modifier.height(8.dp))
-                    EventsEditor(vm, null, vm.archiveWindow("shift", day))
+                    EventsEditor(vm, openMap, vm.archiveWindow("shift", day))
                 }
                 val list = vm.archiveFlights(mode, day)
                 Spacer(Modifier.height(8.dp))
