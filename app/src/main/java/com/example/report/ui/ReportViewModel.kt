@@ -203,6 +203,10 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     var autoSignal by mutableStateOf(false)
     var needsText by mutableStateOf("")
     var needsNumbered by mutableStateOf(true)
+    /** Last edit time of «Потреби» (sync: newer wins). */
+    private var needsU = 0L
+    /** Archive opened at a given (mode, day) — e.g. «Попередня доба». */
+    var archiveInit by mutableStateOf<Pair<String, Long>?>(null)
     /** Incremented to make the UI send directly to WhatsApp/Signal. */
     var directTrigger by mutableStateOf(0)
     val schedules = mutableStateListOf<ScheduledSend>()
@@ -290,6 +294,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         autoSignal = sp.getBoolean("kap_signal", false)
         needsText = sp.getString("kap_needs", "") ?: ""
         needsNumbered = sp.getBoolean("kap_needs_num", true)
+        needsU = sp.getLong("kap_needs_u", 0L)
         droneIns.addAll(store.load<List<DroneIn>>("kap_dronein", emptyList()))
         droneModel = sp.getString("kap_drone_model", "Matrice 4T") ?: "Matrice 4T"
         strike = store.load<StrikeDraft>("kap_strike", StrikeDraft())
@@ -429,7 +434,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         dayEnd = dayEnd,
         routes = routes.toList(),
         drones = droneIns.toList(),
-        syncV = 3,
+        syncV = 4,
+        needs = needsText, needsNum = needsNumbered, needsU = needsU,
         deleted = deletedT.keys.toList(),
     )
 
@@ -1540,12 +1546,44 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     fun changeNeedsText(v: String) {
         needsText = v
-        store.putString("kap_needs", v)
+        needsTypedAt = System.currentTimeMillis()
+        saveNeeds(System.currentTimeMillis(), sync = true)
     }
 
     fun toggleNeedsNumbered() {
         needsNumbered = !needsNumbered
+        saveNeeds(System.currentTimeMillis(), sync = true)
+    }
+
+    private fun saveNeeds(u: Long, sync: Boolean) {
+        needsU = u
+        store.putString("kap_needs", needsText)
         store.putBool("kap_needs_num", needsNumbered)
+        store.sp.edit().putLong("kap_needs_u", u).apply()
+        if (sync) emit(Op.SetNeeds(needsText, needsNumbered, u))
+    }
+
+    /**
+     * Remote «Потреби». [force]: a live edit (hub receiving an op / client receiving the hub's
+     * snapshot) — applied unless we typed here in the last 2 s (so an echo doesn't fight typing).
+     * Otherwise (merging a reconnecting device's state) only if newer.
+     */
+    private fun applyRemoteNeeds(text: String, num: Boolean, u: Long, force: Boolean) {
+        if (text == needsText && num == needsNumbered) return
+        if (force) { if (System.currentTimeMillis() - needsTypedAt < 2000) return }
+        else if (u <= needsU) return
+        needsText = text
+        needsNumbered = num
+        saveNeeds(maxOf(u, needsU), sync = false)
+    }
+    private var needsTypedAt = 0L
+
+    /** «Попередня доба» is offered for this long after a new shift starts. */
+    fun prevShiftDay(): Long? {
+        val now = System.currentTimeMillis()
+        val from = ReportBuilder.shiftBounds(now, shiftStart).first
+        if (now - from > 6 * 3_600_000L) return null
+        return dayStartOf(from - DAY + 3_600_000L)
     }
 
     fun toggleFlight() {
@@ -1919,6 +1957,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 is Op.SetScoutAuto -> changeScoutAuto(op.v)
                 is Op.ResetShift -> resetShift()
                 is Op.UpsertFlight -> applyUpsert(op.f, op.base)
+                is Op.SetNeeds -> { needsTypedAt = 0L; applyRemoteNeeds(op.text, op.numbered, op.u, force = true) }
                 is Op.SetRoutes -> applyRemoteRoutes(op.routes)
                 is Op.SetDrones -> applyRemoteDrones(op.drones)
             }
@@ -1946,6 +1985,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             sortieCount = st.sortieCount
             scoutAuto = st.scoutAuto
             if (st.syncV >= 2) { applyRemoteRoutes(st.routes); applyRemoteDrones(st.drones) }
+            if (st.syncV >= 4) applyRemoteNeeds(st.needs, st.needsNum, st.needsU, force = true)
             activeRecT = flights.firstOrNull { it.lt == null }?.t
             store.putStringNow("kap_flights", store.json.encodeToString(flightsSer, flights.toList()))
             bump()
@@ -2053,6 +2093,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             }
             saveDroneIns(sync = false)
 
+            if (st.syncV >= 4) applyRemoteNeeds(st.needs, st.needsNum, st.needsU, force = false)
             if (name.isEmpty()) name = st.name
             if (leader.isEmpty()) leader = st.leader
             if (shiftCode.isEmpty()) shiftCode = st.shiftCode

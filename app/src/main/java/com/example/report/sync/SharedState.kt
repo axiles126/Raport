@@ -40,4 +40,8 @@ data class SharedState(
     val syncV: Int = 0,
     /** Deleted flights (takeoff ts) so a stale device can't bring them back. */
     val deleted: List<Long> = emptyList(),
+    /** «Потреби» text, numbering flag and last-edit time (newer wins). syncV >= 4. */
+    val needs: String = "",
+    val needsNum: Boolean = true,
+    val needsU: Long = 0L,
 )

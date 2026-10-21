@@ -72,8 +72,9 @@ fun ArchiveScreen(vm: ReportViewModel, openMap: (() -> Unit)? = null, close: () 
     val ctx = LocalContext.current
     BackHandler(onBack = close)
     val days = remember { vm.archiveDays() }
-    var day by remember { mutableStateOf(days.first()) }
-    var mode by remember { mutableStateOf(if (vm.mode in listOf("day", "night", "shift")) vm.mode else "day") }
+    val init = remember { vm.archiveInit.also { vm.archiveInit = null } }
+    var day by remember { mutableStateOf(init?.second ?: days.first()) }
+    var mode by remember { mutableStateOf(init?.first ?: if (vm.mode in listOf("day", "night", "shift")) vm.mode else "day") }
     var flightRep by remember { mutableStateOf<Flight?>(null) }
     var pickDate by remember { mutableStateOf(false) }
     var addFlight by remember { mutableStateOf(false) }

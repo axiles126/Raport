@@ -366,6 +366,20 @@ fun MainScreen(
                             }
                         }
 
+                        // ---- «Попередня доба»: first hours of a new shift → yesterday's report in one tap ----
+                        if (vm.mode == "shift") {
+                            vm.dataRev
+                            vm.prevShiftDay()?.let { pd ->
+                                androidx.compose.material3.OutlinedButton(
+                                    onClick = { vm.archiveInit = "shift" to pd; onOpenArchive() },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, OkGreen),
+                                ) {
+                                    Text("◀ ПОПЕРЕДНЯ ДОБА · " + com.example.report.core.TimeFmt.fmtD(pd), color = OkGreen, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
                         // ---- report preview (tap opens the full-screen pad) ----
                         if (vm.previewVisible) {
                             Spacer(Modifier.height(12.dp))

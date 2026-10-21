@@ -159,4 +159,8 @@ sealed class Op {
     /** Whole flight from a client (newer [Flight.u] wins on the hub). */
     @Serializable
     data class UpsertFlight(val f: Flight, val base: Flight? = null) : Op()
+
+    /** «Потреби» editor (whole text; [u] = edit time, newer wins). */
+    @Serializable
+    data class SetNeeds(val text: String, val numbered: Boolean, val u: Long) : Op()
 }
