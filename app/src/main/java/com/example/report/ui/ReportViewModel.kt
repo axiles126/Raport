@@ -594,6 +594,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun syncPreview() {
         if (!previewEdited) { updatePreview(false); return }
+        if (previewText.isBlank()) { previewEdited = false; updatePreview(true); return }
         val auto = buildReport(stripRep = true)
         if (mode == "current") {
             val rec = curRec()
@@ -610,8 +611,10 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             previewText = merged
             return
         }
-        if (previewBase.isEmpty()) return
-        previewText = Merge3.merge(previewBase, previewText, auto)
+        // nothing to keep (text wiped / no base) → back to the automatic report instead of staying empty
+        if (previewBase.isEmpty() || previewText.isBlank()) { previewEdited = false; updatePreview(true); return }
+        val merged = Merge3.merge(previewBase, previewText, auto)
+        previewText = if (merged.isBlank()) auto else merged
         previewBase = auto
     }
 
