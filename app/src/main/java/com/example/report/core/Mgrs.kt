@@ -74,6 +74,96 @@ object Mgrs {
         return "$zone$band$sq" + "00000$e".takeLast(5) + "00000$nn".takeLast(5)
     }
 
+    /**
+     * MGRS → (lat, lon) of the referenced square's centre (port of proj4js `mgrs` toPoint).
+     * Accepts spaces / lower case, 1..5-digit precision. A reference without the zone
+     * ("DQ 1234 5678") takes [defaultZone] (e.g. "37U" from the map centre). null if invalid.
+     */
+    fun inverse(ref: String, defaultZone: String? = null): Pair<Double, Double>? {
+        var s = ref.replace(Regex("\\s+"), "").uppercase()
+        if (s.isEmpty()) return null
+        if (!s[0].isDigit() && defaultZone != null) s = defaultZone + s
+        val m = Regex("^(\\d{1,2})([C-HJ-NP-X])([A-HJ-NP-Z])([A-HJ-NP-V])(\\d*)$").find(s) ?: return null
+        val zone = m.groupValues[1].toInt()
+        if (zone !in 1..60) return null
+        val band = m.groupValues[2][0]
+        val digits = m.groupValues[5]
+        if (digits.length % 2 != 0 || digits.length > 10) return null
+        val set = (zone % 6).let { if (it == 0) 6 else it }
+        val e100 = eastingFromChar(m.groupValues[3][0], set) ?: return null
+        var n100 = northingFromChar(m.groupValues[4][0], set) ?: return null
+        val minN = minNorthing(band) ?: return null
+        while (n100 < minN) n100 += 2_000_000.0
+        val half = digits.length / 2
+        val acc = if (half == 0) 100_000.0 else Math.pow(10.0, (5 - half).toDouble())
+        val e = (if (half == 0) 0.0 else digits.substring(0, half).toDouble() * acc) + e100 + acc / 2
+        val n = (if (half == 0) 0.0 else digits.substring(half).toDouble() * acc) + n100 + acc / 2
+        return utmToLatLon(e, n, zone, band)
+    }
+
+    private fun eastingFromChar(c: Char, set: Int): Double? {
+        var cur = SET_ORIGIN_COLUMN_LETTERS[set - 1].code
+        var v = 100_000.0
+        var rewind = false
+        while (cur != c.code) {
+            cur++
+            if (cur == LI) cur++
+            if (cur == LO) cur++
+            if (cur > LZ) { if (rewind) return null; cur = LA; rewind = true }
+            v += 100_000.0
+        }
+        return v
+    }
+
+    private fun northingFromChar(c: Char, set: Int): Double? {
+        if (c.code > LV) return null
+        var cur = SET_ORIGIN_ROW_LETTERS[set - 1].code
+        var v = 0.0
+        var rewind = false
+        while (cur != c.code) {
+            cur++
+            if (cur == LI) cur++
+            if (cur == LO) cur++
+            if (cur > LV) { if (rewind) return null; cur = LA; rewind = true }
+            v += 100_000.0
+        }
+        return v
+    }
+
+    private fun minNorthing(band: Char): Double? = when (band) {
+        'C' -> 1_100_000.0; 'D' -> 2_000_000.0; 'E' -> 2_800_000.0; 'F' -> 3_700_000.0
+        'G' -> 4_600_000.0; 'H' -> 5_500_000.0; 'J' -> 6_400_000.0; 'K' -> 7_300_000.0
+        'L' -> 8_200_000.0; 'M' -> 9_100_000.0; 'N' -> 0.0; 'P' -> 800_000.0
+        'Q' -> 1_700_000.0; 'R' -> 2_600_000.0; 'S' -> 3_500_000.0; 'T' -> 4_400_000.0
+        'U' -> 5_300_000.0; 'V' -> 6_200_000.0; 'W' -> 7_000_000.0; 'X' -> 7_900_000.0
+        else -> null
+    }
+
+    private fun utmToLatLon(easting: Double, northing: Double, zone: Int, band: Char): Pair<Double, Double> {
+        val e1 = (1 - sqrt(1 - ECC2)) / (1 + sqrt(1 - ECC2))
+        val x = easting - 500_000.0
+        var y = northing
+        if (band < 'N') y -= 10_000_000.0
+        val lonOrigin = (zone - 1) * 6 - 180 + 3
+        val mm = y / K0
+        val mu = mm / (A * (1 - ECC2 / 4 - 3 * ECC2 * ECC2 / 64 - 5 * ECC2 * ECC2 * ECC2 / 256))
+        val phi1 = mu + (3 * e1 / 2 - 27 * e1 * e1 * e1 / 32) * sin(2 * mu) +
+            (21 * e1 * e1 / 16 - 55 * e1 * e1 * e1 * e1 / 32) * sin(4 * mu) +
+            (151 * e1 * e1 * e1 / 96) * sin(6 * mu)
+        val n1 = A / sqrt(1 - ECC2 * sin(phi1) * sin(phi1))
+        val t1 = tan(phi1) * tan(phi1)
+        val c1 = ECC_P2 * cos(phi1) * cos(phi1)
+        val r1 = A * (1 - ECC2) / Math.pow(1 - ECC2 * sin(phi1) * sin(phi1), 1.5)
+        val d = x / (n1 * K0)
+        var lat = phi1 - (n1 * tan(phi1) / r1) * (d * d / 2 -
+            (5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * ECC_P2) * d * d * d * d / 24 +
+            (61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * ECC_P2 - 3 * c1 * c1) * d * d * d * d * d * d / 720)
+        lat /= DEG
+        val lon = lonOrigin + (d - (1 + 2 * t1 + c1) * d * d * d / 6 +
+            (5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * ECC_P2 + 24 * t1 * t1) * d * d * d * d * d / 120) / cos(phi1) / DEG
+        return Pair(lat, lon)
+    }
+
     private fun letterDesignator(lat: Double): Char = when {
         lat in 72.0..84.0 -> 'X'
         lat >= 64.0 && lat < 72.0 -> 'W'

@@ -83,6 +83,8 @@ import org.osmdroid.views.overlay.Polyline
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Gesture
@@ -136,6 +138,9 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
     var showDrawMenu by remember { mutableStateOf(false) }
     var showOffline by remember { mutableStateOf(false) }
     var offline by remember { mutableStateOf(vm.store.bool("kap_map_offline")) }
+    /** MGRS under the centre cross (updated as the map moves). */
+    var centerMgrs by remember { mutableStateOf("") }
+    var showGoto by remember { mutableStateOf(false) }
     val heading = rememberHeading(compassOn)
 
     val mapView = remember {
@@ -155,7 +160,17 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
         }
     }
     DisposableEffect(Unit) {
-        onDispose { mapView.onDetach() }
+        fun upd() {
+            val c = mapView.mapCenter
+            centerMgrs = runCatching { Coords.fmtMGRS(Mgrs.forward(c.longitude, c.latitude)) }.getOrDefault("")
+        }
+        val l = object : org.osmdroid.events.MapListener {
+            override fun onScroll(event: org.osmdroid.events.ScrollEvent?): Boolean { upd(); return false }
+            override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean { upd(); return false }
+        }
+        mapView.addMapListener(l)
+        mapView.post { upd() }
+        onDispose { mapView.removeMapListener(l); mapView.onDetach() }
     }
     LaunchedEffect(compassOn, heading) {
         mapView.mapOrientation = if (compassOn && heading != null) -heading else 0f
@@ -303,6 +318,21 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
             }
             if (vm.strikeCoordTarget) MapLabel("Ураження: довге натискання — координати цілі")
             if (compassOn && heading != null) MapLabel("курс " + heading.toInt() + "°")
+            if (centerMgrs.isNotEmpty()) MapLabel("✛ " + centerMgrs)
+        }
+
+        // centre cross: the point whose MGRS is shown above («✛ …»); touches pass through
+        androidx.compose.foundation.Canvas(Modifier.align(Alignment.Center).size(44.dp)) {
+            val c = center
+            val r = size.minDimension / 2
+            val gap = r * 0.28f
+            for ((col, w) in listOf(Color.Black.copy(alpha = 0.6f) to 6f, Color(0xFFFF5252) to 3f)) {
+                drawLine(col, androidx.compose.ui.geometry.Offset(c.x - r, c.y), androidx.compose.ui.geometry.Offset(c.x - gap, c.y), w)
+                drawLine(col, androidx.compose.ui.geometry.Offset(c.x + gap, c.y), androidx.compose.ui.geometry.Offset(c.x + r, c.y), w)
+                drawLine(col, androidx.compose.ui.geometry.Offset(c.x, c.y - r), androidx.compose.ui.geometry.Offset(c.x, c.y - gap), w)
+                drawLine(col, androidx.compose.ui.geometry.Offset(c.x, c.y + gap), androidx.compose.ui.geometry.Offset(c.x, c.y + r), w)
+            }
+            drawCircle(Color(0xFFFF5252), 2.5f, c)
         }
 
         val landscape = LocalConfiguration.current.screenWidthDp > LocalConfiguration.current.screenHeightDp
@@ -335,6 +365,15 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                 }
             })
         }
+        val btnGoto: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Search, "Перейти за координатами MGRS", onClick = { showGoto = true }) }
+        val btnPin: @Composable () -> Unit = {
+            MapIconBtn(Icons.Filled.AddLocationAlt, "Поставити точку в центрі (✛)", onClick = {
+                val c = mapView.mapCenter
+                label = vm.addPoint(c.latitude, c.longitude).mgrs
+                if (vm.strikeCoordTarget) picked = label
+                rev++
+            })
+        }
         val btnZoomIn: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Add, "Збільшити", onClick = { mapView.controller.zoomIn() }) }
         val btnZoomOut: @Composable () -> Unit = { MapIconBtn(Icons.Filled.Remove, "Зменшити", onClick = { mapView.controller.zoomOut() }) }
 
@@ -347,7 +386,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                     .padding(4.dp),
             ) {
                 Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    btnDraw(); btnRoutes(); btnOffline(); btnClearPts()
+                    btnGoto(); btnPin(); btnDraw(); btnRoutes(); btnOffline(); btnClearPts()
                 }
                 Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                     btnClose(); btnLoc(); btnCompass(); btnZoomIn(); btnZoomOut()
@@ -361,7 +400,7 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                     .padding(8.dp)
                     .verticalScroll(androidx.compose.foundation.rememberScrollState()),
             ) {
-                btnClose(); btnLoc(); btnCompass(); btnDraw(); btnRoutes(); btnOffline(); btnClearPts()
+                btnClose(); btnGoto(); btnPin(); btnLoc(); btnCompass(); btnDraw(); btnRoutes(); btnOffline(); btnClearPts()
             }
             Column(
                 Modifier
@@ -411,6 +450,54 @@ fun MapScreen(vm: ReportViewModel, close: () -> Unit) {
                 rev++
             },
             onDismiss = { selPoint = null },
+        )
+    }
+
+    if (showGoto) {
+        var q by remember { mutableStateOf("") }
+        val zoneDef = centerMgrs.takeWhile { it != ' ' }.takeIf { it.length in 2..3 }
+        val target = Mgrs.inverse(q, zoneDef)
+        AlertDialog(
+            onDismissRequest = { showGoto = false },
+            title = { Text("Перейти за координатами") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = q, onValueChange = { q = it.uppercase() },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("MGRS, напр. 37U DQ 12345 67890") },
+                        singleLine = true,
+                        isError = q.isNotBlank() && target == null,
+                    )
+                    Text(
+                        if (q.isBlank()) "Можна без зони (DQ 1234 5678) — візьметься зона центру карти" + (zoneDef?.let { " ($it)" } ?: "")
+                        else if (target == null) "Не розпізнано" else "✓ " + Coords.fmtMGRS(Mgrs.forward(target.second, target.first)),
+                        fontSize = 12.sp,
+                        color = if (q.isNotBlank() && target == null) ErrRed else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = target != null, onClick = {
+                    target?.let { (la, lo) ->
+                        mapView.controller.setZoom(maxOf(mapView.zoomLevelDouble, 16.0))
+                        mapView.controller.setCenter(GeoPoint(la, lo))
+                    }
+                    showGoto = false
+                }) { Text("Перейти") }
+            },
+            dismissButton = {
+                TextButton(enabled = target != null, onClick = {
+                    target?.let { (la, lo) ->
+                        mapView.controller.setZoom(maxOf(mapView.zoomLevelDouble, 16.0))
+                        mapView.controller.setCenter(GeoPoint(la, lo))
+                        label = vm.addPoint(la, lo).mgrs
+                        if (vm.strikeCoordTarget) picked = label
+                        rev++
+                    }
+                    showGoto = false
+                }) { Text("Перейти й поставити точку") }
+            },
         )
     }
 
