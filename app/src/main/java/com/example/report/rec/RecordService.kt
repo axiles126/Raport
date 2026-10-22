@@ -29,7 +29,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Screen recorder (MediaProjection → MediaRecorder, H.264, no audio) → Movies/Report/*.mp4.
+ * Screen recorder (MediaProjection → MediaRecorder, H.264, no audio) → Movies/Report (mp4).
  * On Android < 14 the projection is kept between recordings so the consent dialog shows once.
  */
 class RecordService : Service() {
