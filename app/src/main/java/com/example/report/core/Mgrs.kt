@@ -96,8 +96,10 @@ object Mgrs {
         while (n100 < minN) n100 += 2_000_000.0
         val half = digits.length / 2
         val acc = if (half == 0) 100_000.0 else Math.pow(10.0, (5 - half).toDouble())
-        val e = (if (half == 0) 0.0 else digits.substring(0, half).toDouble() * acc) + e100 + acc / 2
-        val n = (if (half == 0) 0.0 else digits.substring(half).toDouble() * acc) + n100 + acc / 2
+        // forward() rounds to the metre → a 1 m reference is that exact point; coarser ones → square centre
+        val off = if (acc >= 10.0) acc / 2 else 0.0
+        val e = (if (half == 0) 0.0 else digits.substring(0, half).toDouble() * acc) + e100 + off
+        val n = (if (half == 0) 0.0 else digits.substring(half).toDouble() * acc) + n100 + off
         return utmToLatLon(e, n, zone, band)
     }
 
