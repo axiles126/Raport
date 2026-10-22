@@ -612,6 +612,16 @@ private fun DrawerContent(
                 Text("поверх усіх застосунків, працює у фоні", color = cs.onSurfaceVariant, fontSize = 11.sp)
             }
         }
+        Row(
+            Modifier.fillMaxWidth().clickableNoRipple { toggleRecButton(context, vm, !vm.recButtonEnabled) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = vm.recButtonEnabled, onCheckedChange = { toggleRecButton(context, vm, it) })
+            Column {
+                Text("Плаваюча кнопка «Запис екрана» ●", fontSize = 13.sp)
+                Text("тап — старт/стоп, без звуку · Відео → Movies/Report", color = cs.onSurfaceVariant, fontSize = 11.sp)
+            }
+        }
         Spacer(Modifier.height(16.dp))
 
         Text("ТЕМА", color = cs.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
@@ -699,10 +709,27 @@ private fun toggleOverlay(context: Context, vm: ReportViewModel, on: Boolean) {
     }
     vm.overlayEnabled = on
     vm.store.putBool("kap_overlay", on)
-    val app = vm.getApplication<android.app.Application>()
-    if (on) {
-        OverlayService.start(app)
-    } else {
-        app.stopService(Intent(app, OverlayService::class.java))
+    syncOverlayService(vm)
+}
+
+/** Floating «Запис екрана» button (needs «поверх інших застосунків» like the takeoff button). */
+private fun toggleRecButton(context: Context, vm: ReportViewModel, on: Boolean) {
+    if (on && !Settings.canDrawOverlays(context)) {
+        context.startActivity(
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        vm.setStatus("Дозвольте «поверх інших застосунків», потім увімкніть ще раз", "dim")
+        return
     }
+    vm.recButtonEnabled = on
+    vm.store.putBool("kap_rec_btn", on)
+    syncOverlayService(vm)
+}
+
+/** The overlay service hosts both buttons; it removes what's off and stops when nothing is on. */
+private fun syncOverlayService(vm: ReportViewModel) {
+    val app = vm.getApplication<android.app.Application>()
+    if (vm.overlayEnabled || vm.recButtonEnabled) OverlayService.start(app)
+    else app.stopService(Intent(app, OverlayService::class.java))
 }

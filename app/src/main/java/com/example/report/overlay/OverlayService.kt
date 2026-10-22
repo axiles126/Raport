@@ -26,6 +26,7 @@ import androidx.core.app.NotificationCompat
 import com.example.report.MainActivity
 import com.example.report.R
 import com.example.report.core.Loss
+import com.example.report.rec.ScreenRec
 import kotlin.math.abs
 
 /**
@@ -54,19 +55,13 @@ class OverlayService : Service() {
         }
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Кнопка «Взліт/Сів» активна")
+            .setContentTitle("Плаваючі кнопки активні")
             .setContentText("Плаваюча кнопка поверх застосунків")
             .setOngoing(true)
             .build()
         startForeground(42, notification)
 
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val iv = ImageView(this).apply {
-            setImageResource(R.drawable.ic_takeoff_fab)
-            setBackgroundColor(0)
-            val p = (8f * resources.displayMetrics.density).toInt()
-            setPadding(p, p, p, p)
-        }
         params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -75,17 +70,133 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 40
-            y = 300
+            x = prefs.getInt("kap_fab_x", 40)
+            y = prefs.getInt("kap_fab_y", 300)
         }
+        FlightBridge.onStateChanged = { view?.post { refreshIcon() } }
+        ScreenRec.onChange = { handler.post { refreshRec() } }
+        syncViews()
+    }
+
+    private val prefs by lazy { getSharedPreferences("kapibara_ui", Context.MODE_PRIVATE) }
+
+    /** Which buttons are on: «Взліт/Сів» (kap_overlay) and «Запис екрана» (kap_rec_btn) — both in the main prefs. */
+    private fun enabled(key: String): Boolean = com.example.report.data.Store(this).sp.getBoolean(key, false)
+
+    /** Adds/removes the buttons per settings; stops the service when none is on. */
+    private fun syncViews() {
+        val fab = enabled("kap_overlay")
+        val rec = enabled("kap_rec_btn")
+        if (fab && view == null) addFlightButton()
+        if (!fab && view != null) { dismissConfirm(); runCatching { wm.removeView(view) }; view = null }
+        if (rec && recView == null) addRecButton()
+        if (!rec && recView != null) { runCatching { wm.removeView(recView) }; recView = null; handler.removeCallbacks(recTick) }
+        if (!fab && !rec) stopSelf()
+    }
+
+    private fun clampToScreen(lp: WindowManager.LayoutParams) {
+        val dm = resources.displayMetrics
+        lp.x = lp.x.coerceIn(0, (dm.widthPixels - px(48)).coerceAtLeast(0))
+        lp.y = lp.y.coerceIn(0, (dm.heightPixels - px(48)).coerceAtLeast(0))
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun addFlightButton() {
+        val iv = ImageView(this).apply {
+            setImageResource(R.drawable.ic_takeoff_fab)
+            setBackgroundColor(0)
+            val p = (8f * resources.displayMetrics.density).toInt()
+            setPadding(p, p, p, p)
+        }
+        clampToScreen(params)
         iv.setOnTouchListener(DragListener(iv))
         view = iv
         runCatching { wm.addView(iv, params) }
         refreshIcon()
-        FlightBridge.onStateChanged = { view?.post { refreshIcon() } }
+    }
+
+    // ---- «Запис екрана» floating button ----
+    private var recView: TextView? = null
+    private lateinit var recParams: WindowManager.LayoutParams
+    private val recTick = object : Runnable {
+        override fun run() { refreshRec(); if (ScreenRec.recording) handler.postDelayed(this, 1000) }
+    }
+
+    @SuppressLint("ClickableViewAccessibility", "SetTextI18n")
+    private fun addRecButton() {
+        val tv = TextView(this).apply {
+            textSize = 15f
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            minWidth = px(56); minHeight = px(56)
+            setPadding(px(10), px(6), px(10), px(6))
+            contentDescription = "Запис екрана"
+        }
+        recParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = prefs.getInt("kap_rec_x", 40)
+            y = prefs.getInt("kap_rec_y", 500)
+        }
+        clampToScreen(recParams)
+        tv.setOnTouchListener(MoveTapListener(tv, recParams, "kap_rec_x", "kap_rec_y") { ScreenRec.toggle(this) })
+        recView = tv
+        runCatching { wm.addView(tv, recParams) }
+        refreshRec()
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun refreshRec() {
+        val tv = recView ?: return
+        val on = ScreenRec.recording
+        if (on) {
+            val s = ((System.currentTimeMillis() - ScreenRec.startedAt) / 1000).toInt()
+            tv.text = "■ %02d:%02d".format(s / 60, s % 60)
+            tv.setTextColor(0xFFFFFFFF.toInt())
+            tv.background = GradientDrawable().apply { cornerRadius = px(28).toFloat(); setColor(0xE0D32F2F.toInt()); setStroke(px(2), 0xFFFFFFFF.toInt()) }
+            handler.removeCallbacks(recTick); handler.postDelayed(recTick, 1000)
+        } else {
+            tv.text = "●"
+            tv.textSize = 22f
+            tv.setTextColor(0xFFFF5252.toInt())
+            tv.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xC0202020.toInt()); setStroke(px(2), 0xFF9E9E9E.toInt()) }
+            handler.removeCallbacks(recTick)
+        }
+        if (on) tv.textSize = 15f
+    }
+
+    /** Drag to move (position remembered under [kx]/[ky]); a tap without moving calls [onTap]. */
+    @SuppressLint("ClickableViewAccessibility")
+    private inner class MoveTapListener(
+        private val v: View, private val lp: WindowManager.LayoutParams,
+        private val kx: String, private val ky: String, private val onTap: () -> Unit,
+    ) : View.OnTouchListener {
+        private var downX = 0f; private var downY = 0f
+        private var sx = 0; private var sy = 0
+        private var dragging = false
+        override fun onTouch(view: View, e: MotionEvent): Boolean {
+            when (e.action) {
+                MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; sx = lp.x; sy = lp.y; dragging = false }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (e.rawX - downX).toInt(); val dy = (e.rawY - downY).toInt()
+                    if (!dragging && (abs(dx) > 12 || abs(dy) > 12)) dragging = true
+                    if (dragging) { lp.x = sx + dx; lp.y = sy + dy; runCatching { wm.updateViewLayout(v, lp) } }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (dragging) prefs.edit().putInt(kx, lp.x).putInt(ky, lp.y).apply() else onTap()
+                }
+            }
+            return true
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        syncViews()
         refreshIcon()
         return START_STICKY
     }
@@ -93,9 +204,13 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         FlightBridge.onStateChanged = null
+        ScreenRec.onChange = null
+        handler.removeCallbacks(recTick)
         dismissConfirm()
         view?.let { runCatching { wm.removeView(it) } }
         view = null
+        recView?.let { runCatching { wm.removeView(it) } }
+        recView = null
     }
 
     private fun refreshIcon() {
@@ -124,7 +239,8 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_UP -> {
                     if (!pressed) return true
                     pressed = false
-                    if (dragging || SystemClock.uptimeMillis() - confirmClosedAt <= 400) return true
+                    if (dragging) { prefs.edit().putInt("kap_fab_x", params.x).putInt("kap_fab_y", params.y).apply(); return true }
+                    if (SystemClock.uptimeMillis() - confirmClosedAt <= 400) return true
                     showFlightPopup()
                     return true
                 }
