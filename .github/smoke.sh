@@ -98,7 +98,7 @@ echo "migration: $(grep -c 'kapibara_enc.xml' smoke/migration.txt) enc, plain_le
   adb logcat -c
   adb shell am start -W -n $PKG/com.example.report.MainActivity >/dev/null; sleep 4
   tap "Меню"; sleep 2
-  for i in 1 2 3 4; do tap "Плаваюча кнопка «Запис екрана» ●" | grep -q '^tap' && break; adb shell input swipe 300 1500 300 500 300; sleep 1; done
+  for i in 1 2 3 4; do tap "Плаваюча кнопка «Запис екрана» ●" | grep -q '^tap' && break; adb shell input swipe 120 560 120 160 300; sleep 1; done
   sleep 2; adb shell input keyevent 4; sleep 1; adb shell input keyevent 3; sleep 3
   TAG=rec; shot 1_bubble
   tap "Запис екрана"; sleep 3; shot 2_consent
