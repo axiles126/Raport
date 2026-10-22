@@ -102,10 +102,11 @@ echo "migration: $(grep -c 'kapibara_enc.xml' smoke/migration.txt) enc, plain_le
   shot 0b_toggled
   sleep 2; adb shell input keyevent 4; sleep 1; adb shell input keyevent 3; sleep 3
   TAG=rec; shot 1_bubble
-  tap "Запис екрана"; sleep 3; shot 2_consent
+  # overlay windows aren't in the uiautomator dump → tap the bubble by position (default spot)
+  adb shell input tap 68 552; sleep 3; shot 2_consent
   tap "A single app" >/dev/null && sleep 1 && tap "Entire screen"; sleep 1
   for p in "Start" "Start recording" "Start now" "Почати"; do tap "$p"; done; sleep 6; shot 3_recording
-  tap "Запис екрана"; sleep 4; shot 4_stopped
+  adb shell input tap 75 552; sleep 4; shot 4_stopped
   adb shell content query --uri content://media/external/video/media --projection _display_name:relative_path:_size
   adb logcat -d | grep -E "FATAL|AndroidRuntime|RecordService" | head -30
 } > smoke/rec.txt 2>&1
