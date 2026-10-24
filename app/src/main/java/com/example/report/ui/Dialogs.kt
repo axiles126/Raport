@@ -411,29 +411,6 @@ fun AutoDjiSection() {
         })
         Text("Плаваюча кнопка шаблонів під час вильоту", fontSize = 14.sp)
     }
-    // «Діагностика DJI»: dump what the accessibility service sees on the DJI Pilot screen (heading test)
-    var diagSum by remember { mutableStateOf(store.sp.getString("kap_dji_diag_sum", "") ?: "") }
-    TextButton(onClick = {
-        store.sp.edit().putLong("kap_dji_diag_until", System.currentTimeMillis() + 60_000L).apply()
-        android.widget.Toast.makeText(context, "Відкрий DJI Pilot (екран польоту з компасом) на 10–20 с, потім повернись сюди", android.widget.Toast.LENGTH_LONG).show()
-    }) { Text("🔎 Діагностика DJI (60 с)", color = OkGreen) }
-    val diagFile = java.io.File(context.filesDir, "dji_diag.txt")
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        while (true) { kotlinx.coroutines.delay(1500); diagSum = store.sp.getString("kap_dji_diag_sum", "") ?: "" }
-    }
-    if (diagSum.isNotEmpty()) Text(diagSum, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (diagFile.exists()) TextButton(onClick = {
-        val dir = java.io.File(context.cacheDir, "share").apply { mkdirs() }
-        val out = java.io.File(dir, "dji_diag.txt"); diagFile.copyTo(out, overwrite = true)
-        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", out)
-        context.startActivity(
-            Intent.createChooser(
-                Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
-                "Діагностика DJI",
-            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-    }) { Text("Поділитися діагностикою") }
     if (serviceOn) {
         Text("✓ Служба працює", color = OkGreen, fontSize = 12.sp)
     } else {
