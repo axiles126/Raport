@@ -74,7 +74,7 @@ class OverlayService : Service() {
             y = prefs.getInt("kap_fab_y", 300)
         }
         FlightBridge.onStateChanged = { view?.post { refreshIcon() } }
-        ScreenRec.onChange = { handler.post { refreshRec() } }
+        ScreenRec.onChange = { handler.post { refreshRec(); refreshHdg() } }
         syncViews()
     }
 
@@ -87,11 +87,14 @@ class OverlayService : Service() {
     private fun syncViews() {
         val fab = enabled("kap_overlay")
         val rec = enabled("kap_rec_btn")
+        val hdgOn = enabled("kap_hdg_btn")
+        if (hdgOn && hdgView == null) addHdgPlate()
+        if (!hdgOn && hdgView != null) { runCatching { wm.removeView(hdgView) }; hdgView = null; ScreenRec.headingStop(this) }
         if (fab && view == null) addFlightButton()
         if (!fab && view != null) { dismissConfirm(); runCatching { wm.removeView(view) }; view = null }
         if (rec && recView == null) addRecButton()
         if (!rec && recView != null) { runCatching { wm.removeView(recView) }; recView = null; handler.removeCallbacks(recTick) }
-        if (!fab && !rec) stopSelf()
+        if (!fab && !rec && !hdgOn) stopSelf()
     }
 
     private fun clampToScreen(lp: WindowManager.LayoutParams) {
@@ -170,25 +173,115 @@ class OverlayService : Service() {
         if (on) tv.textSize = 15f
     }
 
+    // ---- «Курс додому» plate: reads the DJI heading, 📌 fixes the outbound course, shows the way back ----
+    private var hdgView: TextView? = null
+    private lateinit var hdgParams: WindowManager.LayoutParams
+    private fun hdgPin(): Int = prefs.getInt("kap_hdg_pin", -1)
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun addHdgPlate() {
+        val tv = TextView(this).apply {
+            textSize = 15f
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(px(12), px(8), px(12), px(8))
+            background = GradientDrawable().apply { cornerRadius = px(10).toFloat(); setColor(0xD0101010.toInt()); setStroke(px(1), STROKE) }
+            contentDescription = "Курс додому"
+        }
+        hdgParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = prefs.getInt("kap_hdg_x", 600)
+            y = prefs.getInt("kap_hdg_y", 130)
+        }
+        clampToScreen(hdgParams)
+        tv.setOnTouchListener(MoveTapListener(tv, hdgParams, "kap_hdg_x", "kap_hdg_y", onLong = {
+            if (hdgPin() >= 0) {
+                prefs.edit().putInt("kap_hdg_pin", -1).apply()
+                android.widget.Toast.makeText(this, "Курс від дому скинуто", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                ScreenRec.headingStop(this)
+                android.widget.Toast.makeText(this, "Читання курсу вимкнено", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            refreshHdg()
+        }) {
+            val h = ScreenRec.heading
+            when {
+                !ScreenRec.headingOn -> ScreenRec.headingStart(this)
+                h == null -> android.widget.Toast.makeText(this, "Курс ще не прочитано — відкрийте екран польоту DJI", android.widget.Toast.LENGTH_SHORT).show()
+                else -> {
+                    prefs.edit().putInt("kap_hdg_pin", h).apply()
+                    vibrate()
+                    android.widget.Toast.makeText(this, "📌 Курс від дому: %03d° → додому %03d°".format(h, (h + 180) % 360), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+            refreshHdg()
+        })
+        hdgView = tv
+        runCatching { wm.addView(tv, hdgParams) }
+        refreshHdg()
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun refreshHdg() {
+        val tv = hdgView ?: return
+        val h = ScreenRec.heading
+        val pin = hdgPin()
+        if (!ScreenRec.headingOn) {
+            tv.text = "🧭 КУРС · тап — увімкнути"
+            tv.setTextColor(DIM)
+            return
+        }
+        if (h == null) {
+            tv.text = "🧭 КУРС ---" + if (pin >= 0) " · ДОДОМУ %03d".format((pin + 180) % 360) else ""
+            tv.setTextColor(DIM)
+            return
+        }
+        if (pin < 0) {
+            tv.text = "КУРС %03d · 📌 тап — від дому".format(h)
+            tv.setTextColor(0xFFFFFFFF.toInt())
+            return
+        }
+        val home = (pin + 180) % 360
+        val d = ((home - h + 540) % 360) - 180 // + → turn right, − → left
+        val turn = when {
+            kotlin.math.abs(d) <= 10 -> "▲ ПРЯМО"
+            d > 0 -> "⟳ %d° ВПРАВО".format(d)
+            else -> "⟲ %d° ВЛІВО".format(-d)
+        }
+        tv.text = "КУРС %03d · ДОДОМУ %03d · %s".format(h, home, turn)
+        tv.setTextColor(if (kotlin.math.abs(d) <= 10) GREEN else 0xFFFFD54F.toInt())
+    }
+
     /** Drag to move (position remembered under [kx]/[ky]); a tap without moving calls [onTap]. */
     @SuppressLint("ClickableViewAccessibility")
     private inner class MoveTapListener(
         private val v: View, private val lp: WindowManager.LayoutParams,
-        private val kx: String, private val ky: String, private val onTap: () -> Unit,
+        private val kx: String, private val ky: String, private val onLong: (() -> Unit)? = null, private val onTap: () -> Unit,
     ) : View.OnTouchListener {
+        private var downAt = 0L
         private var downX = 0f; private var downY = 0f
         private var sx = 0; private var sy = 0
         private var dragging = false
         override fun onTouch(view: View, e: MotionEvent): Boolean {
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; sx = lp.x; sy = lp.y; dragging = false }
+                MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; sx = lp.x; sy = lp.y; dragging = false; downAt = SystemClock.uptimeMillis() }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (e.rawX - downX).toInt(); val dy = (e.rawY - downY).toInt()
                     if (!dragging && (abs(dx) > 12 || abs(dy) > 12)) dragging = true
                     if (dragging) { lp.x = sx + dx; lp.y = sy + dy; runCatching { wm.updateViewLayout(v, lp) } }
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (dragging) prefs.edit().putInt(kx, lp.x).putInt(ky, lp.y).apply() else onTap()
+                    when {
+                        dragging -> prefs.edit().putInt(kx, lp.x).putInt(ky, lp.y).apply()
+                        onLong != null && SystemClock.uptimeMillis() - downAt > 650 -> onLong.invoke()
+                        else -> onTap()
+                    }
                 }
             }
             return true
@@ -211,6 +304,8 @@ class OverlayService : Service() {
         view = null
         recView?.let { runCatching { wm.removeView(it) } }
         recView = null
+        hdgView?.let { runCatching { wm.removeView(it) } }
+        hdgView = null
     }
 
     private fun refreshIcon() {

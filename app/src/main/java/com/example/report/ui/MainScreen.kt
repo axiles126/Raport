@@ -622,6 +622,17 @@ private fun DrawerContent(
                 Text("тап — старт/стоп, без звуку · Відео → Movies/Report", color = cs.onSurfaceVariant, fontSize = 11.sp)
             }
         }
+        Row(
+            Modifier.fillMaxWidth().clickableNoRipple { toggleHdgPlate(context, vm, !vm.hdgEnabled) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = vm.hdgEnabled, onCheckedChange = { toggleHdgPlate(context, vm, it) })
+            Column {
+                Text("Плашка «Курс додому» 🧭", fontSize = 13.sp)
+                Text("читає курс з компаса DJI · тап — увімк./📌 курс від дому · довгий тап — скинути/вимкнути",
+                    color = cs.onSurfaceVariant, fontSize = 11.sp)
+            }
+        }
         Spacer(Modifier.height(16.dp))
 
         Text("ТЕМА", color = cs.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
@@ -727,9 +738,24 @@ private fun toggleRecButton(context: Context, vm: ReportViewModel, on: Boolean) 
     syncOverlayService(vm)
 }
 
+/** «Курс додому» plate (reads the DJI compass heading from the screen). */
+private fun toggleHdgPlate(context: Context, vm: ReportViewModel, on: Boolean) {
+    if (on && !Settings.canDrawOverlays(context)) {
+        context.startActivity(
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        vm.setStatus("Дозвольте «поверх інших застосунків», потім увімкніть ще раз", "dim")
+        return
+    }
+    vm.hdgEnabled = on
+    vm.store.putBool("kap_hdg_btn", on)
+    syncOverlayService(vm)
+}
+
 /** The overlay service hosts both buttons; it removes what's off and stops when nothing is on. */
 private fun syncOverlayService(vm: ReportViewModel) {
     val app = vm.getApplication<android.app.Application>()
-    if (vm.overlayEnabled || vm.recButtonEnabled) OverlayService.start(app)
+    if (vm.overlayEnabled || vm.recButtonEnabled || vm.hdgEnabled) OverlayService.start(app)
     else app.stopService(Intent(app, OverlayService::class.java))
 }

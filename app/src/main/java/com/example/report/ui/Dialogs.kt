@@ -434,6 +434,36 @@ fun AutoDjiSection() {
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }) { Text("Поділитися діагностикою") }
+    // «Курс додому»: what the screen reader sees (calibration)
+    var hdgInfo by remember { mutableStateOf("") }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            val r = com.example.report.rec.ScreenRec
+            hdgInfo = if (!r.headingOn) "Курс: вимкнено" else "Курс: " + (r.heading?.let { "%03d°".format(it) } ?: "---") + " · OCR «" + r.lastRaw + "»"
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+    Text(hdgInfo, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    var rect by remember { mutableStateOf(store.sp.getString("kap_hdg_rect", "") ?: "") }
+    OutlinedTextField(
+        value = rect, onValueChange = { rect = it; store.putString("kap_hdg_rect", it.trim()) },
+        label = { Text("Область курсу x0,y0,x1,y1 (частки екрана)") },
+        placeholder = { Text("0.455,0.70,0.545,0.785") }, singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    val crop = java.io.File(context.filesDir, "hdg_crop.png")
+    if (crop.exists()) TextButton(onClick = {
+        val dir = java.io.File(context.cacheDir, "share").apply { mkdirs() }
+        val out = java.io.File(dir, "hdg_crop.png"); crop.copyTo(out, overwrite = true)
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", out)
+        context.startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                "Кадр курсу",
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }) { Text("Поділитися кадром курсу") }
     if (serviceOn) {
         Text("✓ Служба працює", color = OkGreen, fontSize = 12.sp)
     } else {

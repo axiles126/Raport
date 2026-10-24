@@ -25,7 +25,8 @@ class RecPermissionActivity : Activity() {
                 Intent(this, RecordService::class.java)
                     .setAction(RecordService.ACTION_START)
                     .putExtra(RecordService.EXTRA_CODE, resultCode)
-                    .putExtra(RecordService.EXTRA_DATA, data),
+                    .putExtra(RecordService.EXTRA_DATA, data)
+                    .putExtra(RecordService.EXTRA_PURPOSE, intent.getStringExtra(RecordService.EXTRA_PURPOSE) ?: ScreenRec.PURPOSE_REC),
             )
         }
         finish()
