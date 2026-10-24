@@ -1,0 +1,5 @@
+ba4a9437e4d18822379e189766d947aaaedc37d8 success
+app-debug.apk: V2 Signer: certificate DN: C=US, O=Android, CN=Android Debug
+app-debug.apk: V2 Signer: certificate SHA-256 digest: 61b2bf921d5e6fa5120757f58b0e803aec5b1ce1c3eae6ff74fb649ea3f84aa9
+app-release.apk: V2 Signer: certificate DN: CN=Report, O=Report, C=UA
+app-release.apk: V2 Signer: certificate SHA-256 digest: 78e01725709bddc3a92107f88a20a061967256058eb5bd2b729206118edce48d

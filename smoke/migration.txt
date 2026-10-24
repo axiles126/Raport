@@ -1,0 +1,8 @@
+Performing Streamed Install
+Success
+/tmp/kapibara.xml: 1 file pushed, 0 skipped. 1.0 MB/s (94 bytes in 0.000s)
+Performing Streamed Install
+Success
+kapibara_enc.xml
+MIGRTEST
+0

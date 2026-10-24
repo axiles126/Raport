@@ -1,0 +1,39 @@
+tap 'Меню' @ 28 52
+NOT FOUND 'Плаваюча кнопка «Запис екрана»'
+tap 'Плаваюча кнопка «Запис екрана»' @ 184 269
+tap 'Entire screen' @ 130 334
+tap 'Start' @ 248 506
+NOT FOUND 'Start recording'
+NOT FOUND 'Start now'
+NOT FOUND 'Почати'
+Row: 0 _display_name=Report_24.10_17-48-21.mp4, relative_path=Movies/Report/, _size=2450049
+10-24 17:47:42.538  7193  7193 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+10-24 17:47:42.542  7193  7193 I AndroidRuntime: Using default boot image
+10-24 17:47:42.542  7193  7193 I AndroidRuntime: Leaving lock profiling enabled
+10-24 17:47:42.619  7193  7193 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-24 17:47:43.651  7193  7193 D AndroidRuntime: Shutting down VM
+10-24 17:47:46.704  7219  7219 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+10-24 17:47:46.707  7219  7219 I AndroidRuntime: Using default boot image
+10-24 17:47:46.707  7219  7219 I AndroidRuntime: Leaving lock profiling enabled
+10-24 17:47:46.784  7219  7219 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-24 17:47:47.802  7219  7219 D AndroidRuntime: Shutting down VM
+10-24 17:47:48.698  7235  7235 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+10-24 17:47:48.701  7235  7235 I AndroidRuntime: Using default boot image
+10-24 17:47:48.701  7235  7235 I AndroidRuntime: Leaving lock profiling enabled
+10-24 17:47:48.778  7235  7235 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-24 17:47:49.796  7235  7235 D AndroidRuntime: Shutting down VM
+10-24 17:47:52.062  7256  7256 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+10-24 17:47:52.066  7256  7256 I AndroidRuntime: Using default boot image
+10-24 17:47:52.066  7256  7256 I AndroidRuntime: Leaving lock profiling enabled
+10-24 17:47:52.142  7256  7256 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-24 17:47:53.159  7256  7256 D AndroidRuntime: Shutting down VM
+10-24 17:47:54.298  7284  7284 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+10-24 17:47:54.301  7284  7284 I AndroidRuntime: Using default boot image
+10-24 17:47:54.301  7284  7284 I AndroidRuntime: Leaving lock profiling enabled
+10-24 17:47:54.380  7284  7284 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-24 17:47:55.402  7284  7284 D AndroidRuntime: Shutting down VM
+10-24 17:48:02.562  7319  7319 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 0 <<<<<<
+10-24 17:48:02.565  7319  7319 I AndroidRuntime: Using default boot image
+10-24 17:48:02.565  7319  7319 I AndroidRuntime: Leaving lock profiling enabled
+10-24 17:48:02.643  7319  7319 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-24 17:48:06.619  7319  7319 D AndroidRuntime: Shutting down VM
