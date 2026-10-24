@@ -188,7 +188,7 @@ fun App(vm: ReportViewModel) {
     }
 
     LaunchedEffect(Unit) {
-        if ((vm.overlayEnabled || vm.recButtonEnabled || vm.hdgEnabled) && Settings.canDrawOverlays(context)) OverlayService.start(context)
+        if ((vm.overlayEnabled || vm.recButtonEnabled) && Settings.canDrawOverlays(context)) OverlayService.start(context)
     }
 
     LaunchedEffect(Unit) { vm.restoreNet() }

@@ -40,7 +40,6 @@ class RecordService : Service() {
     private var pfd: ParcelFileDescriptor? = null
     private var uri: Uri? = null
     private var usedOnce = false
-    private var hdg: HeadingReader? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -60,12 +59,10 @@ class RecordService : Service() {
                 projection = p
                 usedOnce = false
                 ScreenRec.projectionReady = true
-                if (intent.getStringExtra(EXTRA_PURPOSE) == ScreenRec.PURPOSE_HDG) startHeading() else startRecording()
+                startRecording()
             }
             ACTION_RECORD -> if (projection != null && !ScreenRec.recording) startRecording() else ScreenRec.toggle(this)
             ACTION_STOP -> stopRecording()
-            ACTION_HDG_ON -> if (projection != null) startHeading() else ScreenRec.headingStart(this)
-            ACTION_HDG_OFF -> stopHeading()
         }
         return START_NOT_STICKY
     }
@@ -79,34 +76,11 @@ class RecordService : Service() {
         else startForeground(NID, n)
     }
 
-    private fun startHeading() {
-        val p = projection ?: return
-        if (hdg != null) return
-        val reader = HeadingReader(this, p) { main.post { ScreenRec.onChange?.invoke() } }
-        if (reader.start()) {
-            hdg = reader
-            ScreenRec.headingOn = true
-        } else {
-            Toast.makeText(this, "Курс: не вдалося захопити екран (" + ScreenRec.lastRaw + ")", Toast.LENGTH_LONG).show()
-        }
-        ScreenRec.onChange?.invoke()
-    }
-
-    private fun stopHeading() {
-        hdg?.stop(); hdg = null
-        ScreenRec.headingOn = false
-        ScreenRec.heading = null
-        ScreenRec.onChange?.invoke()
-        if (Build.VERSION.SDK_INT >= 34 && !ScreenRec.recording) releaseProjection()
-    }
-
     private fun startRecording() {
         val p = projection ?: return
         if (ScreenRec.recording) return
         // Android 14+: one virtual display per projection → a new consent for every recording
-        if ((usedOnce || hdg != null) && Build.VERSION.SDK_INT >= 34) {
-            Toast.makeText(this, "Android 14+: запис і курс одночасно не підтримуються — вимкніть курс", Toast.LENGTH_LONG).show(); return
-        }
+        if (usedOnce && Build.VERSION.SDK_INT >= 34) { releaseProjection(); ScreenRec.toggle(this); return }
         try {
             val dm = DisplayMetrics()
             @Suppress("DEPRECATION")
@@ -157,7 +131,7 @@ class RecordService : Service() {
         cleanupRecorder(delete = !ok)
         ScreenRec.onChange?.invoke()
         Toast.makeText(this, if (ok) "Запис збережено: Відео/Movies → Report" else "Запис надто короткий — не збережено", Toast.LENGTH_SHORT).show()
-        if (Build.VERSION.SDK_INT >= 34 && hdg == null) { releaseProjection() }
+        if (Build.VERSION.SDK_INT >= 34) { releaseProjection() }
     }
 
     private fun cleanupRecorder(delete: Boolean) {
@@ -175,7 +149,6 @@ class RecordService : Service() {
     }
 
     private fun releaseProjection() {
-        hdg?.stop(); hdg = null; ScreenRec.headingOn = false; ScreenRec.heading = null
         runCatching { projection?.stop() }
         projection = null
         ScreenRec.projectionReady = false
@@ -191,7 +164,6 @@ class RecordService : Service() {
 
     override fun onDestroy() {
         if (ScreenRec.recording) stopRecording()
-        hdg?.stop(); hdg = null; ScreenRec.headingOn = false; ScreenRec.heading = null
         runCatching { projection?.stop() }
         projection = null
         ScreenRec.projectionReady = false
@@ -204,9 +176,6 @@ class RecordService : Service() {
         const val ACTION_START = "rec.start"
         const val ACTION_RECORD = "rec.record"
         const val ACTION_STOP = "rec.stop"
-        const val ACTION_HDG_ON = "hdg.on"
-        const val ACTION_HDG_OFF = "hdg.off"
-        const val EXTRA_PURPOSE = "purpose"
         const val EXTRA_CODE = "code"
         const val EXTRA_DATA = "data"
         private const val CH = "screen_rec"

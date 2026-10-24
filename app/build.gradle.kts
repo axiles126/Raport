@@ -17,8 +17,8 @@ android {
         applicationId = "io.github.axiles126.report"
         minSdk = 29
         targetSdk = 37
-        versionCode = 47
-        versionName = "5.6"
+        versionCode = 46
+        versionName = "5.5"
     }
 
     signingConfigs {
@@ -72,9 +72,6 @@ dependencies {
 
     // XML theme parent Theme.Material3.DayNight.NoActionBar
     implementation("com.google.android.material:material:1.14.0")
-
-    // On-device text recognition (bundled model, no Google services / internet) — DJI heading digits
-    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     // Coroutines / serialization
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
