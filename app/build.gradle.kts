@@ -17,8 +17,8 @@ android {
         applicationId = "io.github.axiles126.report"
         minSdk = 29
         targetSdk = 37
-        versionCode = 45
-        versionName = "5.4"
+        versionCode = 46
+        versionName = "5.5"
     }
 
     signingConfigs {
