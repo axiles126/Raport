@@ -67,6 +67,39 @@ class AutoFlightTest {
         assertEquals(listOf(Action.TAKEOFF, Action.LANDING), events.map { it.action })
     }
 
+    /** Real M4T / Pilot 2 (RU) sequence from the user's log, no altitude available. */
+    @Test fun realM4tLogManualLanding() {
+        run(30, "Режим N - Время ожидания", null)
+        run(2, "Подготовка к взлету", null)
+        run(2, "Готовность к полету", null)
+        run(600, "Режим N - Визуальное позиционирование", null)   // takeoff at sec 34
+        run(20, "Режим S - Визуальное позиционирование", null)
+        run(100, "Режим N - Визуальное позиционирование", null)
+        run(5, "Режим S - Невозможно выполнить взлет", null)       // landed at sec 754
+        run(30, "Соединение с дроном прервано", null)
+        assertEquals(listOf(Action.TAKEOFF, Action.LANDING), events.map { it.action })
+        assertEquals(at(34), events[0].at)
+        assertEquals(at(754), events[1].at)
+    }
+
+    @Test fun realM4tLogAutoLanding() {
+        run(5, "Готовность к полету", null)
+        run(300, "Режим N - Визуальное позиционирование", null)
+        run(60, "Посадка", null); run(1, "Принудительное приземление", null)
+        run(5, "Режим N - Невозможно выполнить взлет", null)
+        assertEquals(listOf(Action.TAKEOFF, Action.LANDING), events.map { it.action })
+        assertEquals(at(366), events[1].at)
+    }
+
+    @Test fun classifyM4t() {
+        assertEquals(Kind.AIR, PilotStatus.classify("Режим N - Визуальное позиционирование"))
+        assertEquals(Kind.AIR, PilotStatus.classify("Режим S - GPS"))
+        assertEquals(Kind.GROUND, PilotStatus.classify("Режим N - Время ожидания"))
+        assertEquals(Kind.GROUND, PilotStatus.classify("Режим S - Невозможно выполнить взлет"))
+        assertEquals(Kind.GROUND, PilotStatus.classify("Готовность к полету"))
+        assertEquals(Kind.OFF, PilotStatus.classify("Соединение с дроном прервано"))
+    }
+
     @Test fun parseAlt() {
         assertEquals(12.3, AutoFlightTracker.parseAlt("H 12.3m")!!, 1e-9)
         assertEquals(-0.4, AutoFlightTracker.parseAlt("-0,4 м")!!, 1e-9)

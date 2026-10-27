@@ -88,7 +88,7 @@ class AutoFlightTracker {
     companion object {
         const val AIR_MS = 3_000L
         const val GROUND_MS = 1_000L
-        const val UNKNOWN_MS = 10_000L
+        const val UNKNOWN_MS = 30_000L
         const val LOW_MS = 15_000L
         const val LOW_ALT_M = 1.0
         const val TAKEOFF_ALT_M = 2.0

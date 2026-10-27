@@ -98,7 +98,7 @@ class PilotWatchService : AccessibilityService() {
         if (text != lastText) {
             lastText = text
             remember(now, text + (alt?.let { " · H " + String.format(java.util.Locale.US, "%.1f", it) } ?: ""), kind)
-            if (altId == null && kind != PilotStatus.Kind.OFF) rememberCandidates(roots)
+            if (altId == null && kind == PilotStatus.Kind.AIR) rememberCandidates(roots)
         }
 
         tracker.setFlying(FlightBridge.flying(this))
@@ -149,7 +149,7 @@ class PilotWatchService : AccessibilityService() {
             val id = n.viewIdResourceName?.substringAfter(":id/") ?: return@walk
             val t = n.text?.toString()?.trim().orEmpty()
             if (t.isNotEmpty() && t.length < 24 && (DIAG_KEYS.any { id.lowercase().contains(it) } || Regex("\\d\\s*(m|м)\\b").containsMatchIn(t)))
-                if (out.size < 25) out += "$id=$t"
+                if (out.size < 40 && "$id=$t" !in out) out += "$id=$t"
         }
         if (out.isNotEmpty()) { candLogged = true; remember(System.currentTimeMillis(), "widgets: " + out.joinToString("; "), PilotStatus.Kind.UNKNOWN) }
     }
@@ -188,7 +188,7 @@ class PilotWatchService : AccessibilityService() {
         const val LOG_N = 80
         private val ALT_KEYS = listOf("altitude", "height", "_alt", "alt_", "_h_value", "tv_h")
         private val NOT_ALT = listOf("asl", "limit", "max", "rth", "gohome", "setting", "unit")
-        private val DIAG_KEYS = listOf("alt", "height", "dist", "speed", "_h", "vs", "hs")
+        private val DIAG_KEYS = listOf("pfd", "alt", "height", "dist", "speed", "_h", "vs", "hs")
 
         /** First non-null text in the node subtree (depth-first). */
         private fun nodeText(node: AccessibilityNodeInfo): String? {
