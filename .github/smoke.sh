@@ -1,7 +1,8 @@
 #!/bin/bash
 # Run identical UI scenario on original APK and rebuilt release APK; collect screenshots + crash logs.
 mkdir -p smoke
-git fetch -q --depth 1 origin orig-apk && git show FETCH_HEAD:original.apk > /tmp/orig.apk
+# original APK may be absent (orig-apk branch removed) — the comparison run is then skipped
+git fetch -q --depth 1 origin orig-apk 2>/dev/null && git show FETCH_HEAD:original.apk > /tmp/orig.apk 2>/dev/null || rm -f /tmp/orig.apk
 NEW=$(ls app/build/outputs/apk/release/*.apk | head -1)
 
 tap() { # tap element by text or content-desc
@@ -45,7 +46,7 @@ run() {
   adb logcat -d -b crash > smoke/${TAG}_crash.txt
   echo "$TAG pid=$PID crashlog=$(wc -c < smoke/${TAG}_crash.txt)" >> smoke/result.txt
 }
-run orig /tmp/orig.apk com.example.report
+[ -s /tmp/orig.apk ] && run orig /tmp/orig.apk com.example.report
 run new "$NEW" io.github.axiles126.report
 
 # --- cleartext check: app (new build) as sync client -> fake hub on host via adb reverse ---
@@ -74,9 +75,8 @@ echo "sync connections=$(wc -l < smoke/hub_got.txt 2>/dev/null || echo 0) first=
 
 # --- migration: plain prefs from the previous build must end up encrypted, data kept ---
 PKG=io.github.axiles126.report
-git show FETCH_HEAD:original.apk >/dev/null 2>&1
-git fetch -q --depth 1 origin ci-log && git show FETCH_HEAD:app-release.apk > /tmp/prev.apk 2>/dev/null
 NEW=$(ls app/build/outputs/apk/release/*.apk | head -1)
+cp "$NEW" /tmp/prev.apk  # published APKs are encrypted now; migrate plain prefs into this same build
 {
   adb root >/dev/null 2>&1; sleep 3
   adb uninstall $PKG >/dev/null 2>&1
