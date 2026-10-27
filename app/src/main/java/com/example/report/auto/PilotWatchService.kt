@@ -81,9 +81,8 @@ class PilotWatchService : AccessibilityService() {
         val roots = buildList {
             rootInActiveWindow?.let { add(it) }
             runCatching { windows }.getOrNull()?.forEach { w -> w.root?.let { add(it) } }
-        }
+        }.filter { it.packageName?.toString() == DJI_PKG }
         val text = roots.firstNotNullOfOrNull { root ->
-            if (root.packageName?.toString() != DJI_PKG) return@firstNotNullOfOrNull null
             root.findAccessibilityNodeInfosByViewId("$DJI_PKG:id/flight_mode_widget")
                 .firstOrNull()
                 ?.let { nodeText(it) }
@@ -93,28 +92,79 @@ class PilotWatchService : AccessibilityService() {
 
         val now = System.currentTimeMillis()
         val kind = PilotStatus.classify(text)
+        // Altitude is ignored while the link is down (the widget may freeze or show 0).
+        val altRaw = if (kind == PilotStatus.Kind.OFF) null else readAlt(roots)
+        val alt = AutoFlightTracker.parseAlt(altRaw)
         if (text != lastText) {
             lastText = text
-            remember(now, text, kind)
+            remember(now, text + (alt?.let { " · H " + String.format(java.util.Locale.US, "%.1f", it) } ?: ""), kind)
+            if (altId == null && kind != PilotStatus.Kind.OFF) rememberCandidates(roots)
         }
 
-        // TODO(decomp): AutoFlightTracker.feed() / PilotStatus.classify() are inlined here in the APK.
-        when (tracker.feed(kind, now)) {
+        tracker.setFlying(FlightBridge.flying(this))
+        val ev = tracker.feed(kind, now, alt) ?: return
+        when (ev.action) {
             AutoFlightTracker.Action.TAKEOFF -> {
                 if (FlightBridge.flying(this)) return
-                FlightBridge.takeoff?.invoke() ?: FlightBridge.storeToggle(this)
+                FlightBridge.takeoffAt?.invoke(ev.at) ?: FlightBridge.storeToggle(this, ev.at)
                 FlightBridge.onStateChanged?.invoke()
-                signal(now, "Авто: Взліт " + TimeFmt.hm(now), "ВЗЛІТ")
+                signal(now, "Авто: Взліт " + TimeFmt.hm(ev.at), "ВЗЛІТ " + TimeFmt.hm(ev.at) + " (" + ev.why + ")")
             }
             AutoFlightTracker.Action.LANDING -> {
-                if (FlightBridge.flying(this)) {
-                    FlightBridge.landing?.invoke() ?: FlightBridge.storeToggle(this)
-                    FlightBridge.onStateChanged?.invoke()
-                    signal(now, "Авто: Сів " + TimeFmt.hm(now), "СІВ")
-                }
+                if (!FlightBridge.flying(this)) return
+                FlightBridge.landingAt?.invoke(ev.at) ?: FlightBridge.storeToggle(this, ev.at)
+                FlightBridge.onStateChanged?.invoke()
+                signal(now, "Авто: Сів " + TimeFmt.hm(ev.at), "СІВ " + TimeFmt.hm(ev.at) + " (" + ev.why + ")")
             }
-            null -> Unit
         }
+    }
+
+    /** View id of the altitude (H) widget once found; tried first, then a search by id keywords. */
+    private var altId: String? = null
+
+    private fun readAlt(roots: List<AccessibilityNodeInfo>): String? {
+        altId?.let { id ->
+            roots.firstNotNullOfOrNull { r -> r.findAccessibilityNodeInfosByViewId(id).firstOrNull()?.let { nodeText(it) } }
+                ?.let { return it }
+        }
+        for (r in roots) {
+            val hit = findNode(r) { n ->
+                val id = n.viewIdResourceName?.lowercase() ?: return@findNode false
+                ALT_KEYS.any { id.contains(it) } && NOT_ALT.none { id.contains(it) } &&
+                    AutoFlightTracker.parseAlt(n.text?.toString()) != null
+            } ?: continue
+            altId = hit.viewIdResourceName
+            store.putString("kap_autodji_altid", altId ?: "")
+            return hit.text?.toString()
+        }
+        return null
+    }
+
+    /** Diagnostic: once, log the widgets that look like altitude / distance / speed (id = text). */
+    private var candLogged = false
+    private fun rememberCandidates(roots: List<AccessibilityNodeInfo>) {
+        if (candLogged) return
+        val out = ArrayList<String>()
+        for (r in roots) walk(r) { n ->
+            val id = n.viewIdResourceName?.substringAfter(":id/") ?: return@walk
+            val t = n.text?.toString()?.trim().orEmpty()
+            if (t.isNotEmpty() && t.length < 24 && (DIAG_KEYS.any { id.lowercase().contains(it) } || Regex("\\d\\s*(m|м)\\b").containsMatchIn(t)))
+                if (out.size < 25) out += "$id=$t"
+        }
+        if (out.isNotEmpty()) { candLogged = true; remember(System.currentTimeMillis(), "widgets: " + out.joinToString("; "), PilotStatus.Kind.UNKNOWN) }
+    }
+
+    private fun walk(n: AccessibilityNodeInfo, depth: Int = 0, f: (AccessibilityNodeInfo) -> Unit) {
+        if (depth > 40) return
+        f(n)
+        for (i in 0 until n.childCount) n.getChild(i)?.let { walk(it, depth + 1, f) }
+    }
+
+    private fun findNode(n: AccessibilityNodeInfo, depth: Int = 0, p: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+        if (depth > 40) return null
+        if (p(n)) return n
+        for (i in 0 until n.childCount) n.getChild(i)?.let { c -> findNode(c, depth + 1, p)?.let { return it } }
+        return null
     }
 
     /** Appends a timestamped line to the rolling (40 entries) auto-DJI debug log. */
@@ -123,7 +173,7 @@ class PilotWatchService : AccessibilityService() {
         store.putString("kap_autodji_last", line)
         val ser = ListSerializer(String.serializer())
         val log = store.load<List<String>>("kap_autodji_log", emptyList())
-        store.putString("kap_autodji_log", store.json.encodeToString(ser, log.takeLast(39) + line))
+        store.putString("kap_autodji_log", store.json.encodeToString(ser, log.takeLast(LOG_N - 1) + line))
     }
 
     private fun signal(now: Long, toast: String, tag: String) {
@@ -135,6 +185,10 @@ class PilotWatchService : AccessibilityService() {
 
     companion object {
         const val DJI_PKG = "com.dji.industry.pilot"
+        const val LOG_N = 80
+        private val ALT_KEYS = listOf("altitude", "height", "_alt", "alt_", "_h_value", "tv_h")
+        private val NOT_ALT = listOf("asl", "limit", "max", "rth", "gohome", "setting", "unit")
+        private val DIAG_KEYS = listOf("alt", "height", "dist", "speed", "_h", "vs", "hs")
 
         /** First non-null text in the node subtree (depth-first). */
         private fun nodeText(node: AccessibilityNodeInfo): String? {

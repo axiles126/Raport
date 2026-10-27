@@ -28,6 +28,7 @@ object OpGuard {
 
     fun op(op: Op, now: Long = System.currentTimeMillis()): Boolean = when (op) {
         is Op.Takeoff -> op.t == 0L || ts(op.t, now)
+        is Op.Landing -> op.t == null || ts(op.t, now)
         is Op.DeleteFlight -> ts(op.t, now)
         is Op.SetFlightTakeoff -> ts(op.t, now) && short(op.hhmm)
         is Op.SetFlightLanding -> ts(op.t, now) && short(op.hhmm)

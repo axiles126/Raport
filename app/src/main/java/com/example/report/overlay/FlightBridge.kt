@@ -22,6 +22,9 @@ object FlightBridge {
     var isFlying: (() -> Boolean)? = null
     var takeoff: (() -> Unit)? = null
     var landing: (() -> Unit)? = null
+    /** Auto-detection: takeoff / landing at a given time (ms). */
+    var takeoffAt: ((Long) -> Unit)? = null
+    var landingAt: ((Long) -> Unit)? = null
     /** «Не зберігати виліт»: drops the active flight. */
     var cancelFlight: (() -> Unit)? = null
     var templates: (() -> List<String>)? = null
@@ -56,15 +59,16 @@ object FlightBridge {
     }
 
     /** Takeoff/landing toggle directly on persisted data (app UI not running). */
-    fun storeToggle(context: Context) {
+    fun storeToggle(context: Context, at: Long = 0L) {
         val store = Store(context)
         val flights = loadFlights(store)
         val active = flights.firstOrNull { it.lt == null }
         val now = System.currentTimeMillis()
+        val t = if (at > 0) at.coerceAtMost(now) else now
         if (active != null) {
-            flights[flights.indexOf(active)] = active.copy(lt = now, u = now)
+            flights[flights.indexOf(active)] = active.copy(lt = t.coerceAtLeast(active.t), u = now)
         } else {
-            flights.add(Flight(now, u = now))
+            flights.add(Flight(t, u = now))
         }
         saveFlights(store, flights)
     }

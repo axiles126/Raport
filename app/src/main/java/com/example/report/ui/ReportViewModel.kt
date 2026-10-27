@@ -334,6 +334,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         FlightBridge.isFlying = { hasActiveFlight() }
         FlightBridge.takeoff = { takeoff() }
         FlightBridge.landing = { landing(true) }
+        FlightBridge.takeoffAt = { t -> takeoff(t) }
+        FlightBridge.landingAt = { t -> landing(true, t) }
         FlightBridge.cancelFlight = { cancelActiveFlight() }
         FlightBridge.templates = { templates.toList() }
         FlightBridge.insertTemplate = { insertTemplate(it) }
@@ -386,6 +388,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         FlightBridge.isFlying = null
         FlightBridge.takeoff = null
         FlightBridge.landing = null
+        FlightBridge.takeoffAt = null
+        FlightBridge.landingAt = null
         FlightBridge.cancelFlight = null
         FlightBridge.templates = null
         FlightBridge.insertTemplate = null
@@ -675,33 +679,35 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     // ==== flights =============================================================================
 
-    fun takeoff() {
+    /** @param at takeoff time (auto-detection passes the moment the drone actually went up); 0 = now. */
+    fun takeoff(at: Long = 0L) {
+        val t = if (at > 0) at else System.currentTimeMillis()
         if (netMode != NetMode.CLIENT) {
             if (hasActiveFlight()) {
                 setStatus("Зайнято — вже є активний виліт", "err")
                 return
             }
-            doTakeoff(System.currentTimeMillis())
-            emit(Op.Takeoff(0L))
+            doTakeoff(t)
+            emit(Op.Takeoff(at))
             return
         }
         if (hasActiveFlight()) {
             setStatus("Зайнято — вже є активний виліт", "err")
             return
         }
-        doTakeoff(System.currentTimeMillis()) // sent to the hub as UpsertFlight
+        doTakeoff(t) // sent to the hub as UpsertFlight
     }
 
     /** @param autoSend fire the configured auto-send after landing. */
-    fun landing(autoSend: Boolean) {
+    fun landing(autoSend: Boolean, at: Long = 0L) {
         val wasActive = hasActiveFlight()
         if (netMode != NetMode.CLIENT) {
-            doLanding()
-            emit(Op.Landing(null))
+            doLanding(at)
+            emit(Op.Landing(if (at > 0) at else null))
             if (autoSend) fireAutoSend()
             return
         }
-        doLanding() // sent to the hub as UpsertFlight
+        doLanding(at) // sent to the hub as UpsertFlight
         if (wasActive && autoSend) fireAutoSend()
     }
 
@@ -714,11 +720,12 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         refreshPreviewNow()
     }
 
-    fun doLanding() {
+    fun doLanding(at: Long = 0L) {
         val now = System.currentTimeMillis()
         flights.firstOrNull { it.lt == null }?.let { f ->
             val i = flights.indexOfFirst { it.t == f.t }
-            if (i >= 0) flights[i] = flights[i].copy(lt = now)
+            // never before the takeoff, never in the future
+            if (i >= 0) flights[i] = flights[i].copy(lt = if (at > 0) at.coerceIn(f.t, now) else now)
         }
         saveFlights()
         syncFlyingState()
@@ -1925,7 +1932,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         try {
             when (op) {
                 is Op.Takeoff -> if (!hasActiveFlight()) doTakeoff(if (op.t > 0) op.t else System.currentTimeMillis())
-                is Op.Landing -> doLanding()
+                is Op.Landing -> doLanding(op.t ?: 0L)
                 is Op.ForceReset -> forceResetActive()
                 is Op.AddFlight -> addFlight()
                 is Op.DeleteFlight -> deleteFlight(op.t)

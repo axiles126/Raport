@@ -426,7 +426,7 @@ fun AutoDjiSection() {
         }) { Text("Відкрити спеціальні можливості") }
     }
     Text(
-        "Взліт — коли Pilot 2 показує політ (ручне керування, маршрут, повернення додому…), посадка — коли знову «Готовність до польоту». Втрата зв'язку посадкою не вважається.",
+        "Взліт — коли Pilot 2 показує політ або висота H піднялась вище 2 м. Посадка — «Готовність до польоту», або зв'язок зник при H≈0 (дрон вимкнули після посадки). Втрата зв'язку на висоті посадкою не вважається. Час — момент зміни, а не підтвердження.",
         Modifier.padding(top = 2.dp),
         color = cs.onSurfaceVariant,
         fontSize = 11.sp,
@@ -438,6 +438,28 @@ fun AutoDjiSection() {
             color = cs.onSurfaceVariant,
             fontSize = 11.sp,
         )
+        var showLog by remember { mutableStateOf(false) }
+        Row {
+            TextButton(onClick = { showLog = !showLog }) { Text(if (showLog) "Сховати журнал DJI" else "Журнал DJI") }
+            TextButton(onClick = {
+                val log = store.load<List<String>>("kap_autodji_log", emptyList())
+                val txt = "Report " + (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "") + " · журнал DJI\n" +
+                    "altId: " + store.str("kap_autodji_altid").ifEmpty { "—" } + "\n" + log.joinToString("\n")
+                context.startActivity(Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, txt), "Журнал DJI",
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }) { Text("Поділитися журналом") }
+        }
+        if (showLog) {
+            val log = remember(tick) { store.load<List<String>>("kap_autodji_log", emptyList()) }
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxWidth().height(220.dp)
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            ) {
+                Text(log.asReversed().joinToString("\n"), fontSize = 10.sp, color = cs.onSurfaceVariant,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            }
+        }
     }
     Spacer(Modifier.height(8.dp))
     HorizontalDivider(color = cs.outline)

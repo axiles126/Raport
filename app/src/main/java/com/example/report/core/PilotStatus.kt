@@ -32,7 +32,8 @@ object PilotStatus {
     //  Bytecode checks OFF, then GROUND, then AIR, each overriding the previous → AIR wins.
     fun classify(raw: String?): Kind {
         val t = raw?.lowercase()?.replace('ё', 'е')?.trim() ?: ""
-        if (t.isEmpty() || t == "n/a") return Kind.UNKNOWN
+        if (t.isEmpty()) return Kind.UNKNOWN
+        if (t == "n/a" || t == "--") return Kind.OFF // no telemetry ≠ unknown mode
         return when {
             AIR.any { t.contains(it) } -> Kind.AIR
             GROUND.any { t.contains(it) } -> Kind.GROUND
