@@ -45,7 +45,8 @@ object SecurePrefs {
         val all = plain.all
         if (all.isEmpty()) return
         val e = enc.edit()
-        for ((k, v) in all) when (v) {
+        // Never overwrite a value already in the encrypted file with an older plain one.
+        for ((k, v) in all) if (!enc.contains(k)) when (v) {
             is String -> e.putString(k, v)
             is Boolean -> e.putBoolean(k, v)
             is Int -> e.putInt(k, v)
@@ -58,7 +59,4 @@ object SecurePrefs {
             app.deleteSharedPreferences(PLAIN_FILE)
         }
     }
-
-    /** Panic wipe: forget the cached instance (files are deleted by the caller). */
-    fun reset() { cached = null }
 }

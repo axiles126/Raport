@@ -74,6 +74,9 @@ fun SecuritySection() {
     var hasPin by remember { mutableStateOf(AppLock.hasPin(ctx)) }
     var after by remember { mutableStateOf(AppLock.lockAfterMin(ctx)) }
     var setting by remember { mutableStateOf(false) }
+    var disabling by remember { mutableStateOf(false) }
+    var changing by remember { mutableStateOf(false) }
+    var secure by remember { mutableStateOf(AppLock.secureScreen(ctx)) }
     Text("БЕЗПЕКА", color = cs.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     Text(
         if (SecurePrefs.isEncrypted) "Дані на телефоні зашифровані (AES-256, Android Keystore)" else "Шифрування недоступне на цьому пристрої",
@@ -82,7 +85,7 @@ fun SecuritySection() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("PIN-код: " + if (hasPin) "увімкнено" else "вимкнено", Modifier.weight(1f), fontSize = 14.sp)
         TextButton(onClick = { setting = true }) { Text(if (hasPin) "Змінити" else "Встановити") }
-        if (hasPin) TextButton(onClick = { AppLock.setPin(ctx, null); hasPin = false }) { Text("Вимкнути", color = ErrRed) }
+        if (hasPin) TextButton(onClick = { disabling = true }) { Text("Вимкнути", color = ErrRed) }
     }
     if (hasPin) Row(verticalAlignment = Alignment.CenterVertically) {
         Text("Блокувати після виходу:", fontSize = 13.sp, modifier = Modifier.weight(1f))
@@ -92,7 +95,42 @@ fun SecuritySection() {
             }
         }
     }
-    if (setting) SetPinDialog({ p -> AppLock.setPin(ctx, p); hasPin = true; setting = false }) { setting = false }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Заборонити скріншоти й запис екрана застосунку", Modifier.weight(1f), fontSize = 13.sp)
+        androidx.compose.material3.Switch(secure, { v ->
+            secure = v; AppLock.setSecureScreen(ctx, v)
+            generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }
+                .filterIsInstance<com.example.report.MainActivity>().firstOrNull()?.applySecureFlag()
+        })
+    }
+    if (setting) {
+        if (hasPin) CurrentPinDialog("Поточний PIN", { setting = false }) { setting = false; disabling = false; changing = true }
+        else SetPinDialog({ p -> AppLock.setPin(ctx, p); hasPin = true; setting = false }) { setting = false }
+    }
+    if (changing) SetPinDialog({ p -> AppLock.setPin(ctx, p); hasPin = true; changing = false }) { changing = false }
+    if (disabling) CurrentPinDialog("Вимкнути PIN", { disabling = false }) { AppLock.setPin(ctx, null); hasPin = false; disabling = false }
+}
+
+/** Asks for the current PIN; [onOk] only after it is verified (attempts are counted like on the lock screen). */
+@Composable
+private fun CurrentPinDialog(title: String, onDismiss: () -> Unit, onOk: () -> Unit) {
+    val ctx = LocalContext.current
+    var p by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(p, { v -> p = v.filter { it.isDigit() }.take(8) }, label = { Text("Поточний PIN") },
+                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                Text(msg, color = ErrRed, fontSize = 12.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = { val r = AppLock.check(ctx, p); p = ""; if (r == null) onOk() else msg = r }, enabled = p.length >= 4) { Text("OK") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Скасувати") } },
+    )
 }
 
 @Composable

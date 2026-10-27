@@ -73,6 +73,12 @@ class ReportAlarmReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pi)
+            // Lock screen shows only the title, never the report text.
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(context, CHANNEL_ID).setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("Звіт «$title» готовий").build()
+            )
             .build()
         try {
             NotificationManagerCompat.from(context).notify(id.hashCode(), notification)

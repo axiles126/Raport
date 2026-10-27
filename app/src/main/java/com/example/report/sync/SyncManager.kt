@@ -95,13 +95,34 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         onMain { onStatus?.invoke("Хаб активний · код " + NetUtil.prettyCode(pairingCode)) }
     }
 
+    /** Handshakes in progress (not yet authenticated) — capped so a flood cannot exhaust the hub. */
+    private val pendingHandshakes = java.util.concurrent.atomic.AtomicInteger(0)
+    /** Wrong-code attempts per remote IP: (count, blocked-until ms). */
+    private val badCode = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Long>>()
+
     private suspend fun DefaultWebSocketServerSession.handleHubSession() {
         if (hubSessions.size >= MAX_PEERS) { close(CloseReason(CloseReason.Codes.TRY_AGAIN_LATER, "full")); return }
+        val ip = runCatching { call.request.local.remoteAddress }.getOrDefault("?")
+        val ban = badCode[ip]
+        if (ban != null && System.currentTimeMillis() < ban.second) {
+            close(CloseReason(CloseReason.Codes.TRY_AGAIN_LATER, "wait")); return
+        }
+        if (pendingHandshakes.incrementAndGet() > MAX_PENDING) {
+            pendingHandshakes.decrementAndGet()
+            close(CloseReason(CloseReason.Codes.TRY_AGAIN_LATER, "busy")); return
+        }
+        var pending = true
+        try { handleHubSessionInner(ip) { if (pending) { pending = false; pendingHandshakes.decrementAndGet() } } }
+        finally { if (pending) pendingHandshakes.decrementAndGet() }
+    }
+
+    private suspend fun DefaultWebSocketServerSession.handleHubSessionInner(ip: String, authed: () -> Unit) {
         // Liveness: ping every 5 s, drop a client that does not answer within 12 s (Wi-Fi gone).
         pingIntervalMillis = PING_MS
         timeoutMillis = PING_TIMEOUT_MS
         // 1. client nonce (or legacy JSON from an old client)
         val first = withTimeoutOrNull(HANDSHAKE_TIMEOUT_MS) { receiveText() }
+        if (first != null && first.length > MAX_HANDSHAKE) { close(CloseReason(CloseReason.Codes.TOO_BIG, "")); return }
         if (first != null && first.startsWith("{")) {
             send(Proto.encode(Msg.Welcome(accepted = false, reason = "оновіть Report на цьому телефоні")))
             close(CloseReason(CloseReason.Codes.NORMAL, "old version"))
@@ -120,14 +141,22 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
 
         // 3. encrypted Hello with the pairing code
         val second = withTimeoutOrNull(HANDSHAKE_TIMEOUT_MS) { receiveText() }
+            ?.takeIf { it.length <= MAX_HANDSHAKE }
         val msg = second?.let { chan.open(it) }?.let { runCatching { Proto.decode(it) }.getOrNull() }
         val hello = msg as? Msg.Hello
         if (hello == null || !java.security.MessageDigest.isEqual(
                 NetUtil.normCode(hello.code).toByteArray(), NetUtil.normCode(pairingCode).toByteArray())) {
+            // Slow down guessing: 5 wrong codes from one IP → that IP waits 60 s (doubling, max ~1 h).
+            val n = (badCode[ip]?.first ?: 0) + 1
+            val wait = if (n % 5 == 0) 60_000L shl minOf(n / 5 - 1, 6) else 0L
+            badCode[ip] = n to (System.currentTimeMillis() + wait)
+            delay(1_000)
             send("X2:Невірний код")
             close(CloseReason(CloseReason.Codes.NORMAL, "bad code"))
             return
         }
+        badCode.remove(ip)
+        authed()
 
         // 4. accept + initial snapshot
         val peer = Peer(this, chan)
@@ -142,14 +171,14 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
                 if (frame !is Frame.Text) return@consumeEach
                 val text = chan.open(frame.readText()) ?: return@consumeEach
                 when (val m = runCatching { Proto.decode(text) }.getOrNull()) {
-                    is Msg.Operation -> onMain {
+                    is Msg.Operation -> if (OpGuard.op(m.op)) onMain {
                         applyOp?.invoke(m.op)
                         broadcastSnapshot()
-                    }
-                    is Msg.PushState -> onMain {
+                    } else Unit
+                    is Msg.PushState -> if (OpGuard.state(m.state)) onMain {
                         mergeState?.invoke(m.state)
                         broadcastSnapshot()
-                    }
+                    } else Unit
                     else -> Unit
                 }
             }
@@ -282,7 +311,8 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
             if (frame !is Frame.Text) return@consumeEach
             val text = peer.chan.open(frame.readText()) ?: return@consumeEach
             when (val m = runCatching { Proto.decode(text) }.getOrNull()) {
-                is Msg.Snapshot -> onMain { applySnapshot?.invoke(m.state) }
+                is Msg.Snapshot -> if (OpGuard.state(m.state)) onMain { applySnapshot?.invoke(m.state) }
+                    else onMain { onStatus?.invoke("Хаб надіслав пошкоджені дані — пропущено") }
                 is Msg.Toast -> onMain { onToast?.invoke(m.text, m.cls) }
                 else -> Unit
             }
@@ -331,6 +361,9 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         /** Biggest legit frame is a snapshot (≈8 days of flights); caps memory a stranger on Wi-Fi can make us allocate. */
         private const val MAX_FRAME = 8L * 1024 * 1024
         private const val MAX_PEERS = 24
+        private const val MAX_PENDING = 4
+        /** Nonce / Hello frames are tiny; anything bigger before authentication is dropped. */
+        private const val MAX_HANDSHAKE = 4_096
         private const val PING_TIMEOUT_MS = 12_000L
     }
 }

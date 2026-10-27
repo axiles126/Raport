@@ -59,8 +59,18 @@ class Store(context: Context) {
         return try {
             json.decodeFromString<T>(s)
         } catch (e: Exception) {
+            keepUnreadable(key, s, e)
             def
         }
+    }
+
+    /**
+     * The stored value could not be decoded: the next save would silently replace it with [def].
+     * Keep the raw text under "<key>_bad" (first copy wins) so it can be recovered.
+     */
+    fun keepUnreadable(key: String, raw: String, e: Exception) {
+        android.util.Log.e("Store", "cannot decode $key: " + e.javaClass.simpleName)
+        if (!sp.contains(key + "_bad")) sp.edit().putString(key + "_bad", raw).commit()
     }
 
     inline fun <reified T> saveNow(key: String, value: T) {

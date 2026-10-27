@@ -894,6 +894,11 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun resetShift() {
+        // Keep the last two pre-reset flight lists (a reset also arrives from other devices).
+        if (flights.isNotEmpty()) {
+            store.str("kap_flights_bak0").takeIf { it.isNotEmpty() }?.let { store.putStringNow("kap_flights_bak1", it) }
+            store.putStringNow("kap_flights_bak0", store.json.encodeToString(flightsSer, flights.toList()))
+        }
         flights.clear()
         activeRecT = null
         curRecT = null

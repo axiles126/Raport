@@ -70,7 +70,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) { takeLoss(intent); com.example.report.core.AppLock.onAppStart(this) }
+        com.example.report.core.AppLock.onAppStart(this)
+        applySecureFlag()
+        if (savedInstanceState == null) takeLoss(intent)
         setContent {
             val vm: ReportViewModel = viewModel()
             val dark = when (vm.themeMode) {
@@ -79,8 +81,9 @@ class MainActivity : ComponentActivity() {
                 else -> null
             }
             ReportTheme(dark) {
-                Surface(Modifier.fillMaxSize()) { App(vm) }
+                // Nothing of the app (dialogs included) is composed until the PIN is entered.
                 if (com.example.report.core.AppLock.locked) com.example.report.ui.LockScreen()
+                else Surface(Modifier.fillMaxSize()) { App(vm) }
                 LaunchedEffect(pendingLoss) {
                     pendingLoss?.let { (cause, at) ->
                         vm.reportLoss(at, cause)
@@ -95,6 +98,11 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         takeLoss(intent)
+    }
+
+    fun applySecureFlag() {
+        if (com.example.report.core.AppLock.secureScreen(this)) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
     }
 
     override fun onStart() {
