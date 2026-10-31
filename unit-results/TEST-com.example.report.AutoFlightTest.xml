@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.report.AutoFlightTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-31T10:47:51.194Z" hostname="runnervmnwato" time="0.057">
+  <properties/>
+  <testcase name="autoLandingStatus" classname="com.example.report.AutoFlightTest" time="0.029"/>
+  <testcase name="classifyM4t" classname="com.example.report.AutoFlightTest" time="0.001"/>
+  <testcase name="manualLandingThenSwitchOff" classname="com.example.report.AutoFlightTest" time="0.002"/>
+  <testcase name="manualTakeoffPressedOnGround" classname="com.example.report.AutoFlightTest" time="0.001"/>
+  <testcase name="linkLostAtHeightIsNotLanding" classname="com.example.report.AutoFlightTest" time="0.005"/>
+  <testcase name="landedAwayFromHomeDoesNotTakeOffAgain" classname="com.example.report.AutoFlightTest" time="0.001"/>
+  <testcase name="realM4tLogAutoLanding" classname="com.example.report.AutoFlightTest" time="0.004"/>
+  <testcase name="parseAlt" classname="com.example.report.AutoFlightTest" time="0.004"/>
+  <testcase name="takeoffByAltitudeWithUnknownText" classname="com.example.report.AutoFlightTest" time="0.002"/>
+  <testcase name="realM4tLogManualLanding" classname="com.example.report.AutoFlightTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
