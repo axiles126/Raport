@@ -213,6 +213,9 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
     /** Called on main after every few failed attempts in a row — VM looks the hub up via NSD. */
     var onConnectFailing: ((Int) -> Unit)? = null
 
+    /** Why the last connection attempt failed (shown in the sync status). */
+    @Volatile private var lastError = ""
+
     @Volatile var connectedHost: String = ""
         private set
 
@@ -235,6 +238,14 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
                     }
                 } catch (e: Exception) {
                     // connection refused / timed out / dropped
+                    lastError = when {
+                        e is java.net.ConnectException -> "хаб не приймає з'єднання (вимкнений або інша мережа)"
+                        e is java.net.NoRouteToHostException -> "немає маршруту до хаба (інша Wi-Fi мережа?)"
+                        e.javaClass.simpleName.contains("Timeout", true) ->
+                            if (Build.VERSION.SDK_INT >= 37) "хаб не відповідає — перевірте дозвіл «Пристрої поблизу» для Report" else "хаб не відповідає (таймаут)"
+                        e is SecurityException || e.message?.contains("EPERM") == true -> "Android блокує локальну мережу — дайте дозвіл «Пристрої поблизу»"
+                        else -> e.javaClass.simpleName
+                    }
                 } finally {
                     clientSession = null
                 }
@@ -244,6 +255,7 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
                     if (fails % 3 == 0) onMain { onConnectFailing?.invoke(fails) }
                 }
                 if (firstTry) onMain { onStatus?.invoke("Перепідключення до хаба…") }
+                else if (!ok && fails % 3 == 0 && lastError.isNotEmpty()) { val m = lastError; onMain { onStatus?.invoke("Немає зв'язку з хабом: $m") } }
                 firstTry = false
                 withTimeoutOrNull(RECONNECT_DELAY_MS) { kick.receive() }
             }
@@ -276,6 +288,7 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         val reply = withTimeoutOrNull(HANDSHAKE_TIMEOUT_MS) { receiveText() }
         val nonceH = SecureChannel.parseNonce(reply)
         if (nonceH == null) {
+            lastError = if (reply == null) "хаб не відповів на рукостискання (зайнятий або блокує)" else "хаб відповів незрозуміло"
             if (reply != null && reply.startsWith("{")) {
                 onMain { onStatus?.invoke("Відмова: на хабі стара версія Report") }
                 clientWantConnect = false
@@ -300,6 +313,7 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
             }
             return // no answer: transient, the loop retries
         }
+        lastError = ""
         onMain { onStatus?.invoke("Підключено до $host") }
 
         // 5. push our local state so the hub can merge it
@@ -361,7 +375,7 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
         /** Biggest legit frame is a snapshot (≈8 days of flights); caps memory a stranger on Wi-Fi can make us allocate. */
         private const val MAX_FRAME = 8L * 1024 * 1024
         private const val MAX_PEERS = 24
-        private const val MAX_PENDING = 4
+        private const val MAX_PENDING = 8
         /** Nonce / Hello frames are tiny; anything bigger before authentication is dropped. */
         private const val MAX_HANDSHAKE = 4_096
         private const val PING_TIMEOUT_MS = 12_000L

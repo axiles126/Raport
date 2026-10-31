@@ -468,6 +468,11 @@ fun AutoDjiSection() {
 
 // ==== Local-network sync =========================================================================
 
+private fun askLocalNet(context: android.content.Context) {
+    generateSequence(context) { (it as? android.content.ContextWrapper)?.baseContext }
+        .filterIsInstance<com.example.report.MainActivity>().firstOrNull()?.ensureLocalNet()
+}
+
 /** "REPORTSYNC:ip:code" (or "ip|code", "ip;code") from the hub QR → (ip, code). */
 private fun parseHubQr(raw: String): Pair<String, String>? {
     val s = raw.trim().removePrefix("REPORTSYNC:")
@@ -496,6 +501,7 @@ private fun qrBitmap(text: String): Bitmap? = try {
 @Composable
 fun NetworkDialog(vm: ReportViewModel, dismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = dismiss,
         confirmButton = { TextButton(onClick = dismiss) { Text("Закрити") } },
@@ -512,7 +518,7 @@ fun NetworkDialog(vm: ReportViewModel, dismiss: () -> Unit) {
                 }
                 val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
                     val contents = result.contents ?: return@rememberLauncherForActivityResult
-                    parseHubQr(contents)?.let { (ip, code) -> vm.connectToHub(ip, code) }
+                    parseHubQr(contents)?.let { (ip, code) -> askLocalNet(context); vm.connectToHub(ip, code) }
                 }
                 when (vm.netMode) {
                     NetMode.SOLO -> {
@@ -522,7 +528,7 @@ fun NetworkDialog(vm: ReportViewModel, dismiss: () -> Unit) {
                             fontSize = 12.sp,
                         )
                         Spacer(Modifier.height(10.dp))
-                        TextButton(onClick = { vm.startHub(null) }) { Text("Стати хабом") }
+                        TextButton(onClick = { askLocalNet(context); vm.startHub(null) }) { Text("Стати хабом") }
                         HorizontalDivider(color = cs.outline)
                         Spacer(Modifier.height(10.dp))
                         Text(
@@ -585,7 +591,7 @@ fun NetworkDialog(vm: ReportViewModel, dismiss: () -> Unit) {
                         )
                         Spacer(Modifier.height(4.dp))
                         TextButton(onClick = {
-                            if (ip.isNotBlank() && code.isNotBlank()) vm.connectToHub(ip, code)
+                            if (ip.isNotBlank() && code.isNotBlank()) { askLocalNet(context); vm.connectToHub(ip, code) }
                         }) { Text("Підключитися") }
                     }
 

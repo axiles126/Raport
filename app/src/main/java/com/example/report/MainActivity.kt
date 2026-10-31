@@ -73,6 +73,8 @@ class MainActivity : ComponentActivity() {
         com.example.report.core.AppLock.onAppStart(this)
         applySecureFlag()
         if (savedInstanceState == null) takeLoss(intent)
+        // Sync was on before (hub/client restore on start) → make sure LAN access is allowed.
+        if (com.example.report.data.Store(this).str("kap_netmode", "solo") != "solo") ensureLocalNet()
         setContent {
             val vm: ReportViewModel = viewModel()
             val dark = when (vm.themeMode) {
@@ -98,6 +100,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         takeLoss(intent)
+    }
+
+    /** Android 17+: asks for «Пристрої поблизу / локальна мережа» if not granted yet. */
+    fun ensureLocalNet() {
+        if (Build.VERSION.SDK_INT < 37) return
+        val p = "android.permission.ACCESS_LOCAL_NETWORK"
+        if (checkSelfPermission(p) != android.content.pm.PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(p), 37)
     }
 
     fun applySecureFlag() {
