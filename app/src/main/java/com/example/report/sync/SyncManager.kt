@@ -174,11 +174,11 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
                     is Msg.Operation -> if (OpGuard.op(m.op)) onMain {
                         applyOp?.invoke(m.op)
                         broadcastSnapshot()
-                    } else Unit
-                    is Msg.PushState -> if (OpGuard.state(m.state)) onMain {
+                    } else onMain { onToast?.invoke("⚠ Відхилено зміну від клієнта: " + m.op.javaClass.simpleName, "err") }
+                    is Msg.PushState -> { val w = OpGuard.why(m.state); if (w == null) onMain {
                         mergeState?.invoke(m.state)
                         broadcastSnapshot()
-                    } else Unit
+                    } else onMain { onToast?.invoke("⚠ Відхилено дані клієнта: $w", "err") } }
                     else -> Unit
                 }
             }
@@ -325,8 +325,8 @@ class SyncManager(private val onMain: (() -> Unit) -> Unit) {
             if (frame !is Frame.Text) return@consumeEach
             val text = peer.chan.open(frame.readText()) ?: return@consumeEach
             when (val m = runCatching { Proto.decode(text) }.getOrNull()) {
-                is Msg.Snapshot -> if (OpGuard.state(m.state)) onMain { applySnapshot?.invoke(m.state) }
-                    else onMain { onStatus?.invoke("Хаб надіслав пошкоджені дані — пропущено") }
+                is Msg.Snapshot -> { val w = OpGuard.why(m.state); if (w == null) onMain { applySnapshot?.invoke(m.state) }
+                    else onMain { onStatus?.invoke("⚠ Дані хаба відхилено: $w") } }
                 is Msg.Toast -> onMain { onToast?.invoke(m.text, m.cls) }
                 else -> Unit
             }

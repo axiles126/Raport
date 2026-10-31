@@ -44,4 +44,6 @@ data class SharedState(
     val needs: String = "",
     val needsNum: Boolean = true,
     val needsU: Long = 0L,
+    /** Deleted drone entries: "t:kind" → deletion time. syncV >= 5 (drones merged per entry). */
+    val droneDel: Map<String, Long> = emptyMap(),
 )

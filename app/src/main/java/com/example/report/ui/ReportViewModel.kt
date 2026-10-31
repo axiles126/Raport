@@ -154,6 +154,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
 
     /** «Заїхав дрон» scans in order (number = position + 1). Synced with the hub (SharedState.drones); not in shift reports. */
     val droneIns = mutableStateListOf<DroneIn>()
+    /** Deleted drone entries ("t:kind" → time) and the list as last saved (to stamp local edits). */
+    private var droneTombs: Map<String, Long> = emptyMap()
+    private var savedDrones: List<DroneIn> = emptyList()
     /** Report archive manual edits (see archiveText). */
     val archEdits = androidx.compose.runtime.mutableStateMapOf<String, ArchEdit>()
     var droneModel by mutableStateOf("Matrice 4T")
@@ -298,6 +301,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         needsNumbered = sp.getBoolean("kap_needs_num", true)
         needsU = sp.getLong("kap_needs_u", 0L)
         droneIns.addAll(store.load<List<DroneIn>>("kap_dronein", emptyList()))
+        droneTombs = store.load<Map<String, Long>>("kap_drone_del", emptyMap())
+        savedDrones = droneIns.toList()
         droneModel = sp.getString("kap_drone_model", "Matrice 4T") ?: "Matrice 4T"
         strike = store.load<StrikeDraft>("kap_strike", StrikeDraft())
         routes.addAll(store.load<List<Route>>("kap_routes", emptyList()))
@@ -440,7 +445,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         dayEnd = dayEnd,
         routes = routes.toList(),
         drones = droneIns.toList(),
-        syncV = 4,
+        droneDel = droneTombs,
+        syncV = 5,
         needs = needsText, needsNum = needsNumbered, needsU = needsU,
         deleted = deletedT.keys.toList(),
     )
@@ -1159,9 +1165,14 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         saveRoutes(sync = false)
     }
 
-    private fun applyRemoteDrones(remote: List<DroneIn>) {
-        if (remote == droneIns.toList()) return
-        droneIns.clear(); droneIns.addAll(remote)
+    /** Merges a remote drone list entry by entry (newer wins, tombstones delete). */
+    private fun applyRemoteDrones(remote: List<DroneIn>, del: Map<String, Long>) {
+        val now = System.currentTimeMillis()
+        val tombs = com.example.report.core.DroneSync.mergeTombs(droneTombs, del, now)
+        val merged = com.example.report.core.DroneSync.merge(droneIns.toList(), remote, tombs)
+        if (merged == droneIns.toList() && tombs == droneTombs) return
+        droneTombs = tombs
+        droneIns.clear(); droneIns.addAll(merged)
         saveDroneIns(sync = false)
     }
 
@@ -1291,8 +1302,15 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     fun resetPositionDrones() { droneIns.clear(); saveDroneIns() }
 
     private fun saveDroneIns(sync: Boolean = true) {
+        if (sync) { // local edit: stamp changed entries, tombstone removed ones
+            val (stamped, tombs) = com.example.report.core.DroneSync.stamp(savedDrones, droneIns.toList(), droneTombs, System.currentTimeMillis())
+            for (i in stamped.indices) if (droneIns[i] != stamped[i]) droneIns[i] = stamped[i]
+            droneTombs = tombs
+        }
+        savedDrones = droneIns.toList()
         store.putStringNow("kap_dronein", store.json.encodeToString(ListSerializer(DroneIn.serializer()), droneIns.toList()))
-        if (sync) emit(Op.SetDrones(droneIns.toList()))
+        store.putStringNow("kap_drone_del", store.json.encodeToString(droneTombs))
+        if (sync) emit(Op.SetDrones(droneIns.toList(), droneTombs))
     }
 
     fun droneReportText(kind: String): String {
@@ -1973,7 +1991,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 is Op.UpsertFlight -> applyUpsert(op.f, op.base)
                 is Op.SetNeeds -> { needsTypedAt = 0L; applyRemoteNeeds(op.text, op.numbered, op.u, force = true) }
                 is Op.SetRoutes -> applyRemoteRoutes(op.routes)
-                is Op.SetDrones -> applyRemoteDrones(op.drones)
+                is Op.SetDrones -> applyRemoteDrones(op.drones, op.del)
             }
         } finally {
             applyingRemote = false
@@ -1998,7 +2016,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             shiftCode = st.shiftCode
             sortieCount = st.sortieCount
             scoutAuto = st.scoutAuto
-            if (st.syncV >= 2) { applyRemoteRoutes(st.routes); applyRemoteDrones(st.drones) }
+            if (st.syncV >= 2) { applyRemoteRoutes(st.routes); applyRemoteDrones(st.drones, st.droneDel) }
             if (st.syncV >= 4) applyRemoteNeeds(st.needs, st.needsNum, st.needsU, force = true)
             activeRecT = flights.firstOrNull { it.lt == null }?.t
             store.putStringNow("kap_flights", store.json.encodeToString(flightsSer, flights.toList()))
@@ -2099,11 +2117,11 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
             val rIds = routes.map { it.id }.toSet()
             for (r in st.routes) if (r.id !in rIds) routes.add(r.copy(visible = true))
             saveRoutes(sync = false)
-            val dKeys = droneIns.map { it.t to it.kind }.toSet()
-            val newD = st.drones.filter { (it.t to it.kind) !in dKeys }
-            if (newD.isNotEmpty()) {
-                val all = (droneIns + newD).sortedBy { it.t }
-                droneIns.clear(); droneIns.addAll(all)
+            run {
+                val tombs = com.example.report.core.DroneSync.mergeTombs(droneTombs, st.droneDel, System.currentTimeMillis())
+                val merged = com.example.report.core.DroneSync.merge(droneIns.toList(), st.drones, tombs)
+                droneTombs = tombs
+                droneIns.clear(); droneIns.addAll(merged)
             }
             saveDroneIns(sync = false)
 

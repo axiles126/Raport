@@ -154,7 +154,7 @@ sealed class Op {
     data class SetRoutes(val routes: List<Route>) : Op()
 
     @Serializable
-    data class SetDrones(val drones: List<DroneIn>) : Op()
+    data class SetDrones(val drones: List<DroneIn>, val del: Map<String, Long> = emptyMap()) : Op()
 
     /** Whole flight from a client (newer [Flight.u] wins on the hub). */
     @Serializable

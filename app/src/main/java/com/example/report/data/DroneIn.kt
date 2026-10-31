@@ -17,4 +17,6 @@ data class DroneIn(
     val pos: Boolean = false,
     /** Hidden by «Очистити» (tab/report restart from №1) but still on the position. */
     val cleared: Boolean = false,
+    /** Last local change (ms) — the newer copy wins when devices merge. 0 = older version. */
+    val u: Long = 0L,
 )

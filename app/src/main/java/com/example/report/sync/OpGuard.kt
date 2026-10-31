@@ -58,17 +58,31 @@ object OpGuard {
         is Op.SetRoutes -> op.routes.size <= MAX_LIST && op.routes.all { r ->
             short(r.id) && short(r.name) && short(r.color) && r.pts.size <= MAX_ROUTE_PTS && r.pts.all { (a, b) -> lat(a) && lng(b) }
         }
-        is Op.SetDrones -> op.drones.size <= MAX_LIST && op.drones.all { short(it.code) && short(it.model) && short(it.tail) && short(it.kind) }
+        is Op.SetDrones -> op.drones.size <= MAX_LIST && op.del.size <= MAX_LIST * 5 && op.drones.all { short(it.code) && short(it.model) && short(it.tail) && short(it.kind) }
         is Op.UpsertFlight -> flight(op.f, now) && (op.base == null || flight(op.base, now))
         is Op.SetNeeds -> s(op.text)
         else -> true
     }
 
-    fun state(st: SharedState, now: Long = System.currentTimeMillis()): Boolean =
-        st.flights.size <= MAX_LIST && st.flights.all { flight(it, now) } &&
-            st.deleted.size <= MAX_LIST * 5 &&
-            st.events.size <= MAX_LIST && st.templates.size <= MAX_LIST && st.templates.all { short(it) } &&
-            st.fields.size <= 200 && st.points.size <= MAX_LIST && st.points.all { lat(it.lat) && lng(it.lng) } &&
-            op(Op.SetRoutes(st.routes), now) && op(Op.SetDrones(st.drones), now) && s(st.needs) &&
-            listOf(st.name, st.leader, st.shiftStart, st.dayStart, st.shiftCode, st.sortieCount, st.dayEnd).all { short(it) }
+    fun state(st: SharedState, now: Long = System.currentTimeMillis()): Boolean = why(st, now) == null
+
+    /** null = ok; otherwise what is wrong (shown in the sync status so problems are visible). */
+    fun why(st: SharedState, now: Long = System.currentTimeMillis()): String? = when {
+        st.flights.size > MAX_LIST -> "вильотів ${st.flights.size}"
+        st.flights.any { !flight(it, now) } -> "виліт " + st.flights.first { !flight(it, now) }.let { TimeFmtShort.of(it.t) }
+        st.deleted.size > MAX_LIST * 5 -> "видалених ${st.deleted.size}"
+        st.events.size > MAX_LIST -> "подій ${st.events.size}"
+        st.templates.size > MAX_LIST || st.templates.any { !short(it) } -> "шаблони"
+        st.fields.size > 200 -> "поля"
+        st.points.size > MAX_LIST || st.points.any { !(lat(it.lat) && lng(it.lng)) } -> "точки карти"
+        !op(Op.SetRoutes(st.routes), now) -> "маршрути"
+        !op(Op.SetDrones(st.drones, st.droneDel), now) -> "дрони"
+        !s(st.needs) -> "потреби"
+        !listOf(st.name, st.leader, st.shiftStart, st.dayStart, st.shiftCode, st.sortieCount, st.dayEnd).all { short(it) } -> "налаштування"
+        else -> null
+    }
+
+    private object TimeFmtShort {
+        fun of(t: Long) = if (t <= 0) "t=$t" else java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).format(java.util.Date(t))
+    }
 }
