@@ -395,7 +395,7 @@ object ReportBuilder {
         }
 
         out += "$i. Втрати БпЛА - ${lossesIn(input.flights, from, to) + cfg.lost}"
-        out += "${i + 1}. Пошкодження БпЛА - ${cfg.dmg}"
+        out += "${i + 1}. Пошкодження БпЛА - ${input.posDamaged ?: cfg.dmg}"
         val props = cfg.props.filter { it.name.isNotEmpty() }
             .ifEmpty { listOf(NamedQty("Тип А"), NamedQty("Тип Б")) }
         out += "${i + 2}. Витрачено пропелерів - " + props.joinToString(",") { "${it.name} - ${it.qty} шт" }

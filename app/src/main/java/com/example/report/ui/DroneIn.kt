@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -183,7 +185,17 @@ fun DroneInScreen(vm: ReportViewModel, startKind: String = DRONE_IN, close: () -
                                 color = if (d.pos) OkGreen else if (d.tail.isEmpty()) ErrRed else cs.onSurface, fontSize = 15.sp,
                                 fontWeight = if (d.pos) FontWeight.Bold else FontWeight.Normal,
                             )
-                            if (d.pos) Text("на позиції", color = OkGreen, fontSize = 11.sp)
+                            if (d.pos || d.dmg) Text(
+                                listOfNotNull("на позиції".takeIf { d.pos }, "пошкоджений".takeIf { d.dmg }).joinToString(" · "),
+                                color = if (d.dmg) ErrRed else OkGreen, fontSize = 11.sp,
+                            )
+                        }
+                        if (d.kind == DRONE_IN) IconButton(onClick = { vm.toggleDroneDmg(idx) }) {
+                            Icon(
+                                if (d.dmg) Icons.Filled.Build else Icons.Outlined.Build,
+                                if (d.dmg) "Зняти «пошкоджений»" else "Позначити пошкодженим",
+                                tint = if (d.dmg) ErrRed else cs.outline,
+                            )
                         }
                         IconButton(onClick = { vm.toggleDronePos(idx) }) {
                             Icon(

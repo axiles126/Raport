@@ -89,6 +89,16 @@ class ReportLogicTest {
         assertTrue(shift, shift.contains("1111 2222"))
     }
 
+    @Test fun dayReportDamagedAndOnPositionFromList() {
+        val f = listOf(Flight(at(10, 0), tpl("", at(10, 5), "Загальна розвідка"), at(10, 30)))
+        val inp = input("day", f, at(12, 0)).copy(
+            posDrones = listOf(com.example.report.data.NamedQty("Matrice 4T", 6)), posDamaged = 2,
+        )
+        val r = ReportBuilder.finalize("day", ReportBuilder.build(inp))
+        assertTrue(r, r.contains("Пошкодження БпЛА - 2"))
+        assertTrue(r, r.contains("\"Matrice 4T\" 6 шт"))
+    }
+
     @Test fun concurrentTemplateOnTwoDevices() {
         val base = Flight(at(10, 0), "10:01 Загальна розвідка", null, u = 1)
         val hub = base.copy(c = base.c + "\n10:05 Ураження FPV", u = 2)       // added on the hub / пульт

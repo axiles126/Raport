@@ -17,6 +17,8 @@ data class DroneIn(
     val pos: Boolean = false,
     /** Hidden by «Очистити» (tab/report restart from №1) but still on the position. */
     val cleared: Boolean = false,
+    /** Marked damaged («пошкоджений») — counted in the day/night report «Пошкодження БпЛА». */
+    val dmg: Boolean = false,
     /** Last local change (ms) — the newer copy wins when devices merge. 0 = older version. */
     val u: Long = 0L,
 )

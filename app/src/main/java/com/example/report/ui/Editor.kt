@@ -138,7 +138,11 @@ fun DayNightSummary(vm: ReportViewModel) {
     val cs = MaterialTheme.colorScheme
     ehead("ЗВЕДЕННЯ ЗМІНИ")
     Stepper("Втрати БпЛА (+ вручну)", vm.dayCfg.lost) { vm.setDayLost(it) }
-    Stepper("Пошкодження", vm.dayCfg.dmg) { vm.setDayDmg(it) }
+    val dmgList = vm.reportPosDamaged()
+    if (dmgList != null) {
+        Text("Пошкодження: $dmgList", color = cs.onSurface, fontSize = 14.sp)
+        Text("Рахується зі списку дронів (🔧 біля дрона)", color = cs.onSurfaceVariant, fontSize = 11.sp)
+    } else Stepper("Пошкодження", vm.dayCfg.dmg) { vm.setDayDmg(it) }
     Spacer(Modifier.height(6.dp))
 
     ehead("ВИТРАЧЕНО ПРОПЕЛЕРІВ")

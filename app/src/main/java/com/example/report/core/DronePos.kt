@@ -13,7 +13,11 @@ object DronePos {
     const val OUT = "out"
     const val LOST = "lost"
 
-    fun count(list: List<DroneIn>): List<NamedQty> {
+    fun count(list: List<DroneIn>): List<NamedQty> =
+        remaining(list).groupBy { it.model.trim() }.map { (k, v) -> NamedQty(k, v.size) }
+
+    /** «Заїхав» entries still on the position after transfers / losses. */
+    fun remaining(list: List<DroneIn>): List<DroneIn> {
         val ins = list.filter { it.kind == IN }.toMutableList()
         val minus = list.filter { it.kind == OUT || it.kind == LOST }.sortedBy { it.t }
         val byModel = ArrayList<DroneIn>()
@@ -28,8 +32,12 @@ object DronePos {
             val i = ins.indexOfLast { it.model.trim().equals(m.model.trim(), true) }
             if (i >= 0) ins.removeAt(i)
         }
-        return ins.groupBy { it.model.trim() }.map { (k, v) -> NamedQty(k, v.size) }
+        return ins
     }
+
+    /** Damaged drones on the position; null = no list in use → the manual day-config number applies. */
+    fun damagedForReport(list: List<DroneIn>): Int? =
+        if (list.any { it.kind == IN }) remaining(list).count { it.dmg } else null
 
     /** For the report: null = no list in use → the manual «Дрони» numbers of the day config apply. */
     fun forReport(list: List<DroneIn>): List<NamedQty>? = if (list.any { it.kind == IN }) count(list) else null

@@ -481,6 +481,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 dayEnd = dayEnd,
                 shiftDetailed = shiftDetailed,
                 posDrones = reportPosDrones(),
+                posDamaged = reportPosDamaged(),
             ),
         )
     }
@@ -553,7 +554,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
                 shiftStart = shiftStart, dayStart = dayStart, shiftCode = shiftCode, sortieCount = "",
                 scoutAuto = scoutAuto, showAir = showAir, showCountShift = showCountShift,
                 now = archNow(mode, day), curRec = null, activeRec = null, flying = false, startTs = 0L,
-                dayEnd = dayEnd, shiftDetailed = shiftDetailed, posDrones = reportPosDrones(),
+                dayEnd = dayEnd, shiftDetailed = shiftDetailed, posDrones = reportPosDrones(), posDamaged = reportPosDamaged(),
             ),
         )
     }
@@ -1045,6 +1046,8 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
     /** For reports: from the list once it has any «Заїхав» entry, else the manual editor rows. */
     fun reportPosDrones(): List<NamedQty>? { dataRev; return com.example.report.core.DronePos.forReport(droneIns.toList()) }
 
+    fun reportPosDamaged(): Int? { dataRev; return com.example.report.core.DronePos.damagedForReport(droneIns.toList()) }
+
     fun positionDrones(): List<NamedQty> { dataRev; return com.example.report.core.DronePos.count(droneIns.toList()) }
 
     /** Flight + comment-line index of the "Втрата дрону" line (to attach map coordinates). */
@@ -1263,6 +1266,15 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val d = droneIns.getOrNull(index) ?: return
         droneIns[index] = d.copy(pos = !d.pos)
         saveDroneIns()
+    }
+
+    /** «Пошкоджений» mark (synced; counted in the day/night report). */
+    fun toggleDroneDmg(index: Int) {
+        val d = droneIns.getOrNull(index) ?: return
+        droneIns[index] = d.copy(dmg = !d.dmg)
+        saveDroneIns()
+        bump(); syncPreview()
+        setStatus(if (!d.dmg) "Дрон позначено пошкодженим" else "Позначку «пошкоджений» знято", "ok")
     }
 
     fun removeDroneEntry(index: Int) {

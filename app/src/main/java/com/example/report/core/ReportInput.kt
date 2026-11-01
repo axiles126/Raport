@@ -31,4 +31,6 @@ data class ReportInput(
     val shiftDetailed: Boolean,
     /** «Дронів на позиції» computed from the drone list (null = use dayCfg.drones). */
     val posDrones: List<com.example.report.data.NamedQty>? = null,
+    /** Damaged drones from the list (null = use dayCfg.dmg). */
+    val posDamaged: Int? = null,
 )

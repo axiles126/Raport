@@ -18,5 +18,12 @@ class DronePosTest {
         assertEquals(4, DronePos.forReport(l)!!.sumOf { it.qty })
     }
 
+    @Test fun damagedCounted() {
+        val l = List(6) { DroneIn(t = it.toLong() + 1, code = "SN$it", dmg = it < 2) } +
+            DroneIn(t = 10, code = "SN0", kind = "out") // a damaged one was handed over → not on position
+        assertEquals(1, DronePos.damagedForReport(l))
+        assertNull(DronePos.damagedForReport(emptyList()))
+    }
+
     @Test fun noListUsesManual() = assertNull(DronePos.forReport(emptyList()))
 }
