@@ -25,5 +25,17 @@ class DronePosTest {
         assertNull(DronePos.damagedForReport(emptyList()))
     }
 
+    /** Real case: 6 arrived, 11 old transfers of OTHER drones → still 6 on position. */
+    @Test fun oldTransfersOfOtherDronesDoNotSubtract() {
+        val ins = List(6) { DroneIn(t = 1000L + it, code = "NEW$it", tail = "19$it") }
+        val outs = List(11) { DroneIn(t = 10L + it, code = "OLD$it", tail = "18$it", kind = "out") }
+        assertEquals(6, DronePos.forReport(ins + outs)!!.sumOf { it.qty })
+    }
+
+    @Test fun transferBeforeArrivalDoesNotCount() {
+        val l = listOf(DroneIn(t = 5, code = "A", kind = "out"), DroneIn(t = 10, code = "A"))
+        assertEquals(1, DronePos.forReport(l)!!.sumOf { it.qty })
+    }
+
     @Test fun noListUsesManual() = assertNull(DronePos.forReport(emptyList()))
 }

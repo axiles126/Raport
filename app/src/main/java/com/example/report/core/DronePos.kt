@@ -16,20 +16,22 @@ object DronePos {
     fun count(list: List<DroneIn>): List<NamedQty> =
         remaining(list).groupBy { it.model.trim() }.map { (k, v) -> NamedQty(k, v.size) }
 
-    /** «Заїхав» entries still on the position after transfers / losses. */
+    /**
+     * «Заїхав» entries still on the position after transfers / losses.
+     * A «Переданий»/«Втрачений» with a serial or tail removes only THAT drone (and only if it arrived
+     * before); if that drone is not in the «Заїхали» list (old transfers), it changes nothing.
+     * Only an entry with neither serial nor tail (e.g. a loss with just the model) takes one of the model.
+     */
     fun remaining(list: List<DroneIn>): List<DroneIn> {
-        val ins = list.filter { it.kind == IN }.toMutableList()
+        val ins = list.filter { it.kind == IN }.sortedBy { it.t }.toMutableList()
         val minus = list.filter { it.kind == OUT || it.kind == LOST }.sortedBy { it.t }
-        val byModel = ArrayList<DroneIn>()
         for (m in minus) {
-            val i = ins.indexOfFirst {
-                (m.code.isNotBlank() && it.code.equals(m.code.trim(), true)) ||
-                    (m.code.isBlank() && m.tail.isNotBlank() && it.tail == m.tail)
+            val code = m.code.trim(); val tail = m.tail.trim()
+            val i = when {
+                code.isNotEmpty() -> ins.indexOfFirst { it.code.trim().equals(code, true) && it.t <= m.t }
+                tail.isNotEmpty() -> ins.indexOfFirst { it.tail.trim() == tail && it.t <= m.t }
+                else -> ins.indexOfLast { it.model.trim().equals(m.model.trim(), true) && it.t <= m.t }
             }
-            if (i >= 0) ins.removeAt(i) else byModel += m
-        }
-        for (m in byModel) {
-            val i = ins.indexOfLast { it.model.trim().equals(m.model.trim(), true) }
             if (i >= 0) ins.removeAt(i)
         }
         return ins
