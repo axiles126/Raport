@@ -1043,27 +1043,9 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
      * ones (matched by number, else 4 digits, else model). Grouped by model.
      */
     /** For reports: from the list once it has any «Заїхав» entry, else the manual editor rows. */
-    fun reportPosDrones(): List<NamedQty>? =
-        if (droneIns.any { it.kind == DRONE_IN }) positionDrones() else null
+    fun reportPosDrones(): List<NamedQty>? { dataRev; return com.example.report.core.DronePos.forReport(droneIns.toList()) }
 
-    fun positionDrones(): List<NamedQty> {
-        dataRev
-        val ins = droneIns.filter { it.kind == DRONE_IN }.toMutableList()
-        val minus = droneIns.filter { it.kind == DRONE_OUT || it.kind == DRONE_LOST }.sortedBy { it.t }
-        val byModel = ArrayList<DroneIn>()
-        for (m in minus) {
-            val i = ins.indexOfFirst {
-                (m.code.isNotBlank() && it.code.equals(m.code.trim(), true)) ||
-                    (m.code.isBlank() && m.tail.isNotBlank() && it.tail == m.tail)
-            }
-            if (i >= 0) ins.removeAt(i) else byModel += m
-        }
-        for (m in byModel) {
-            val i = ins.indexOfLast { it.model.trim().equals(m.model.trim(), true) }
-            if (i >= 0) ins.removeAt(i)
-        }
-        return ins.groupBy { it.model.trim() }.map { (k, v) -> NamedQty(k, v.size) }
-    }
+    fun positionDrones(): List<NamedQty> { dataRev; return com.example.report.core.DronePos.count(droneIns.toList()) }
 
     /** Flight + comment-line index of the "Втрата дрону" line (to attach map coordinates). */
     fun lossLineTarget(): Pair<Flight, Int>? {

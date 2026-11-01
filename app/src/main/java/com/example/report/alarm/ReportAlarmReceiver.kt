@@ -201,6 +201,10 @@ class ReportAlarmReceiver : BroadcastReceiver() {
                     startTs = 0L,
                     dayEnd = sp.getString("kap_dayend", "") ?: "",
                     shiftDetailed = sp.getBoolean("kap_shiftdetail", true),
+                    // same «Дронів на позиції» as in the app (from the drone list)
+                    posDrones = com.example.report.core.DronePos.forReport(
+                        store.load<List<com.example.report.data.DroneIn>>("kap_dronein", emptyList()),
+                    ),
                 ),
             ))
         }
