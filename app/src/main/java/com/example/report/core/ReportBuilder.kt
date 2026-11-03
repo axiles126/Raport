@@ -86,7 +86,7 @@ object ReportBuilder {
         if (rep != null && rep.isNotEmpty()) return rep
 
         var head = TimeFmt.fmtD(f?.t ?: input.now)
-        if (input.name.isNotEmpty()) head = "СП ${input.name} $head"
+        if (input.name.isNotEmpty()) head = "${PosName.plain(input.name)} $head"
         out += head
 
         if (f == null) {
@@ -239,7 +239,7 @@ object ReportBuilder {
         fun scout(a: Long, b: Long) = TimeFmt.hm(a) + "-" + TimeFmt.hm(b) + "-Ведення розвідки"
 
         val out = ArrayList<String>()
-        if (name.isNotEmpty()) out += "Екіпаж СП \"$name\":"
+        if (name.isNotEmpty()) out += "Екіпаж ${PosName.quoted(name)}:"
         out += TimeFmt.fmtD(from) + "-" + TimeFmt.fmtD(to)
         out += "Перелік подій та виявлених цілей" + (if (code.isNotEmpty()) " $code" else "") + " в районі спостереження"
 
@@ -259,7 +259,7 @@ object ReportBuilder {
         val sorties = input.sortieCount.trim().toIntOrNull()
             ?: input.flights.count { it.t in from until to }
         out += "За час добової зміни здійснено $sorties вильотів."
-        out += "Без втрат чи поранень серед особового складу СП $name: Інформацію про події та виявлені цілі було передано оперативному черговому."
+        out += "Без втрат чи поранень серед особового складу ${PosName.plain(name)}: Інформацію про події та виявлені цілі було передано оперативному черговому."
         return out.joinToString("\n")
     }
 
@@ -365,7 +365,7 @@ object ReportBuilder {
         fun count(re: Regex): Int = lines.filter { re.containsMatchIn(it) }.sumOf { lineMult(it) }
 
         val out = ArrayList<String>()
-        if (name.isNotEmpty()) out += "Екіпаж СП \"$name\":"
+        if (name.isNotEmpty()) out += "Екіпаж ${PosName.quoted(name)}:"
 
         var date = TimeFmt.fmtD4(from)
         val date2 = TimeFmt.fmtD4(to)

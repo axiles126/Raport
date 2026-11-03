@@ -568,6 +568,7 @@ private fun DrawerContent(
             onValueChange = vm::changeName,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Назва позиції") },
+            supportingText = { Text("У звітах: Екіпаж " + com.example.report.core.PosName.quoted(vm.name.ifBlank { "Назва" }) + ". Інший тип — на початку: «СП Дирижабль»") },
             singleLine = true,
         )
         Spacer(Modifier.height(6.dp))

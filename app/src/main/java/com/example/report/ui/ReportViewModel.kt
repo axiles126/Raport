@@ -1064,7 +1064,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val d = lossDraft ?: return ""
         return buildString {
             append(TimeFmt.fmtD(d.at)).append(' ').append(TimeFmt.hm(d.at))
-            if (name.isNotBlank()) append(", СП \"").append(name.trim()).append('"')
+            if (name.isNotBlank()) append(", ").append(com.example.report.core.PosName.quoted(name))
             append(".\n")
             append(Loss.line(d.cause)).append(".")
             // drone right after the cause
@@ -1313,7 +1313,7 @@ class ReportViewModel(application: Application) : AndroidViewModel(application) 
         val one = list.size == 1
         val title = if (kind == "out") (if (one) "Переданий дрон" else "Передані дрони")
                     else (if (one) "Заїхав дрон" else "Заїхали дрони")
-        val head = title + (if (name.isNotBlank()) " · СП \"$name\"" else "") + " · " + TimeFmt.fmtD(System.currentTimeMillis())
+        val head = title + (if (name.isNotBlank()) " · " + com.example.report.core.PosName.quoted(name) else "") + " · " + TimeFmt.fmtD(System.currentTimeMillis())
         val rows = list.mapIndexed { i, d -> "${i + 1}. ${d.model} (${d.tail.ifEmpty { "    " }}) ${d.code}".trimEnd() }
         return (listOf(head) + rows + "Всього: ${list.size}").joinToString("\n")
     }
