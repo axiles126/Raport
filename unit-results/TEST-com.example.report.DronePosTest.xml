@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.report.DronePosTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-03T17:12:33.390Z" hostname="runnervmnwato" time="0.007">
+  <properties/>
+  <testcase name="sixInList" classname="com.example.report.DronePosTest" time="0.005"/>
+  <testcase name="outAndLostSubtract" classname="com.example.report.DronePosTest" time="0.001"/>
+  <testcase name="noListUsesManual" classname="com.example.report.DronePosTest" time="0.0"/>
+  <testcase name="transferBeforeArrivalDoesNotCount" classname="com.example.report.DronePosTest" time="0.0"/>
+  <testcase name="oldTransfersOfOtherDronesDoNotSubtract" classname="com.example.report.DronePosTest" time="0.0"/>
+  <testcase name="damagedCounted" classname="com.example.report.DronePosTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

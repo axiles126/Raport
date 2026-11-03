@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.report.OpGuardTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-03T17:12:33.432Z" hostname="runnervmnwato" time="0.014">
+  <properties/>
+  <testcase name="garbageRejected" classname="com.example.report.OpGuardTest" time="0.012"/>
+  <testcase name="normalPasses" classname="com.example.report.OpGuardTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.report.DroneSyncTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-03T17:12:33.400Z" hostname="runnervmnwato" time="0.011">
+  <properties/>
+  <testcase name="newerEditWins" classname="com.example.report.DroneSyncTest" time="0.006"/>
+  <testcase name="bothAddDifferentDrones" classname="com.example.report.DroneSyncTest" time="0.0"/>
+  <testcase name="stampMarksOnlyChanged" classname="com.example.report.DroneSyncTest" time="0.001"/>
+  <testcase name="deletionTravelsAndDoesNotComeBack" classname="com.example.report.DroneSyncTest" time="0.001"/>
+  <testcase name="lostOpThenStaleSnapshotKeepsNewDrone" classname="com.example.report.DroneSyncTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

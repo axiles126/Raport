@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.report.MgrsTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-03T17:12:33.412Z" hostname="runnervmnwato" time="0.018">
+  <properties/>
+  <testcase name="formats" classname="com.example.report.MgrsTest" time="0.013"/>
+  <testcase name="roundTrip" classname="com.example.report.MgrsTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
